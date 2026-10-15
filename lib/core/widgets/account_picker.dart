@@ -45,7 +45,7 @@ class AccountPicker extends StatelessWidget {
       builder: (context, controller, _) => OutlinedButton.icon(
         onPressed: () => controller.isOpen ? controller.close() : controller.open(),
         icon: const Icon(Icons.filter_list, size: 18),
-        label: Text(_label),
+        label: Text(_label, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
       ),
     );
   }

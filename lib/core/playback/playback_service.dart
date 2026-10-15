@@ -10,18 +10,29 @@ class PlaybackService {
   final AccountRepository accounts;
 
   PlaybackService(this.accounts) {
+    // Print mpv's network events (reconnects, drops, timeouts) to the Terminal.
+    player.stream.log.listen((l) {
+      final t = l.text.toLowerCase();
+      if (t.contains('reconnect') || t.contains('http') || t.contains('end of file') || t.contains('timeout') || t.contains('eof')) {
+        debugPrint('[mpv] ${l.prefix}: ${l.text.trim()}');
+      }
+    });
     // Live channels never truly end. If one does, the provider dropped it: reconnect.
     player.stream.completed.listen((done) {
       if (done) _onDropped('ended');
     });
     player.stream.error.listen((e) => _onDropped('error: $e'));
+    // Once playback passes one second, the stream counts as started.
+    player.stream.position.listen((p) {
+      if (p > const Duration(seconds: 1)) _started = true;
+    });
     // Clear the reconnect badge once video is flowing again.
     player.stream.buffering.listen((b) {
       if (!b && player.state.playing && !_reconnectPending) reconnecting.value = null;
     });
   }
 
-  final Player player = Player();
+  final Player player = Player(configuration: const PlayerConfiguration(logLevel: MPVLogLevel.warn));
   late final VideoController controller = VideoController(player);
 
   /// What's playing right now (null = nothing).
@@ -34,6 +45,8 @@ class PlaybackService {
   final _passCache = <String, String>{};
 
   String? _lastUrl;
+  bool _started = false; // true once the stream has actually played
+  int _startRetries = 0;
   bool _reconnectPending = false;
   final List<DateTime> _recentReconnects = [];
   static const _maxReconnects = 8;
@@ -79,6 +92,8 @@ class PlaybackService {
     final url = await urlFor(item);
     _recentReconnects.clear();
     _reconnectPending = false;
+    _started = false;
+    _startRetries = 0;
     reconnecting.value = null;
     _lastUrl = url;
     current.value = item;
@@ -91,6 +106,24 @@ class PlaybackService {
     final item = current.value;
     final url = _lastUrl;
     if (item == null || url == null || item.kind != 'live' || _reconnectPending) return;
+    // Never got going: one retry (covers one-connection-limit providers), then give up clearly.
+    if (!_started) {
+      if (_startRetries >= 1) {
+        reconnecting.value = "This channel isn't working right now. Try another one.";
+        return;
+      }
+      _startRetries++;
+      _reconnectPending = true;
+      reconnecting.value = 'Retrying...';
+      debugPrint('[playback] stream did not start ($why), one retry in 2.5s');
+      Future.delayed(const Duration(milliseconds: 2500), () async {
+        _reconnectPending = false;
+        if (current.value?.id != item.id) return;
+        await player.open(Media(url, httpHeaders: {'User-Agent': bmUserAgent}));
+        await player.play();
+      });
+      return;
+    }
     final now = DateTime.now();
     _recentReconnects.removeWhere((t) => now.difference(t) > const Duration(minutes: 1));
     if (_recentReconnects.length >= _maxReconnects) {

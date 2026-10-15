@@ -87,7 +87,10 @@ String _genre(String s) {
 
 Classified classify(String category, String name) {
   var genre = _genre(category);
-  if (genre.isEmpty) genre = _genre(name);
+  final byName = _genre(name);
+  if (genre.isEmpty) genre = byName;
+  // Channels named for cartoons or anime win over a generic "Kids" category.
+  if (genre == 'Kids' && byName == 'Cartoons & Anime') genre = byName;
   if (genre.isEmpty) genre = 'Other';
   var country = _country(category);
   if (country.isEmpty) country = _country(name);

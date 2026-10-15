@@ -62,7 +62,7 @@ class FilterMenu extends StatelessWidget {
       builder: (context, controller, _) => OutlinedButton.icon(
         onPressed: () => controller.isOpen ? controller.close() : controller.open(),
         icon: const Icon(Icons.tune, size: 18),
-        label: Text(count == 0 ? 'Filters' : 'Filters ($count)'),
+        label: Text(count == 0 ? 'Filters' : 'Filters ($count)', maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
       ),
     );
   }

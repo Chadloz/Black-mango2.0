@@ -33,6 +33,7 @@ class _LiveScreenState extends State<LiveScreen> {
   Timer? _debounce;
   StreamSubscription<List<Account>>? _acctSub;
   final _scroll = ScrollController();
+  double? _guideW; // guide width while playing, set by dragging the divider
 
   @override
   void initState() {
@@ -135,18 +136,22 @@ class _LiveScreenState extends State<LiveScreen> {
             ),
           );
           // Wide window: guide on the left, video fills the rest.
-          if (box.maxWidth >= 1100) {
-            final listW = (box.maxWidth * 0.34).clamp(360.0, 540.0).toDouble();
+          if (box.maxWidth >= 800) {
+            // Playing: slimmer guide so the video gets the room. Idle: the guide takes it all.
+            final maxGuide = max(260.0, box.maxWidth - 320);
+            final listW = cur == null
+                ? box.maxWidth
+                : (_guideW ?? (box.maxWidth * 0.3).clamp(280.0, 420.0).toDouble()).clamp(260.0, maxGuide).toDouble();
             return Row(
               children: [
                 SizedBox(
                   width: listW,
                   child: Column(
-                    children: [_toolbar(compact: true), _pills(), countLine, Expanded(child: _list(cur))],
+                    children: [_toolbar(compact: cur != null), _pills(), countLine, Expanded(child: _list(cur))],
                   ),
                 ),
-                const VerticalDivider(width: 1),
-                Expanded(child: _PlayerArea(item: cur, acctNames: _acctNames)),
+                if (cur != null) _dragHandle(box.maxWidth, listW),
+                if (cur != null) Expanded(child: _PlayerArea(item: cur, acctNames: _acctNames)),
               ],
             );
           }
@@ -207,7 +212,7 @@ class _LiveScreenState extends State<LiveScreen> {
           children: [
             search,
             const SizedBox(height: 8),
-            Row(children: [filters, const SizedBox(width: 8), Flexible(child: accounts)]),
+            Row(children: [Expanded(child: filters), const SizedBox(width: 8), Expanded(child: accounts)]),
           ],
         ),
       );
@@ -222,6 +227,24 @@ class _LiveScreenState extends State<LiveScreen> {
           const SizedBox(width: 8),
           accounts,
         ],
+      ),
+    );
+  }
+
+  /// The line between guide and video. Drag it like a spreadsheet column.
+  Widget _dragHandle(double total, double current) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeColumn,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragUpdate: (d) => setState(
+          () => _guideW = (current + d.delta.dx).clamp(260.0, max(260.0, total - 320)).toDouble(),
+        ),
+        child: Container(
+          width: 9,
+          alignment: Alignment.center,
+          child: Container(width: 1, color: BMColors.border),
+        ),
       ),
     );
   }
@@ -256,6 +279,8 @@ class _LiveScreenState extends State<LiveScreen> {
                 style: TextStyle(color: BMColors.dim)),
       );
     }
+    // Number column fits the biggest number in the list, plus a little gap.
+    final numberWidth = _items.length.toString().length * 7.5 + 10;
     return ListView.builder(
       controller: _scroll,
       itemCount: _items.length,
@@ -268,6 +293,7 @@ class _LiveScreenState extends State<LiveScreen> {
           accountName: _acctNames[it.accountId] ?? '',
           active: cur?.id == it.id,
           onTap: () => _play(it),
+          numberWidth: numberWidth,
         );
       },
     );
@@ -364,7 +390,8 @@ class _ChannelRow extends StatelessWidget {
   final String accountName;
   final bool active;
   final VoidCallback onTap;
-  const _ChannelRow({required this.index, required this.item, required this.accountName, required this.active, required this.onTap});
+  final double numberWidth;
+  const _ChannelRow({required this.index, required this.item, required this.accountName, required this.active, required this.onTap, required this.numberWidth});
 
   @override
   Widget build(BuildContext context) {
@@ -380,7 +407,7 @@ class _ChannelRow extends StatelessWidget {
         child: Row(
           children: [
             SizedBox(
-              width: 48,
+              width: numberWidth,
               child: Text('${index + 1}', style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 12, color: BMColors.dim)),
             ),
             _Logo(url: item.logo, name: item.name),
