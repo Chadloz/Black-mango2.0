@@ -6,6 +6,6 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ComingSoon(icon: Icons.settings, title: 'Settings', note: 'Accounts and preferences are coming next.');
+    return const ComingSoon(icon: Icons.settings, title: 'Settings', note: 'Playback, data, debug log, and hotkeys will live here.');
   }
 }

@@ -6,6 +6,6 @@ class SeriesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ComingSoon(icon: Icons.video_library, title: 'Series', note: 'Your shows will show up here.');
+    return const ComingSoon(icon: Icons.video_library, title: 'Shows', note: 'Your shows will show up here.');
   }
 }

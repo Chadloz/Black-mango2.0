@@ -11,17 +11,27 @@ class BMColors {
   static const dim = Color(0xFF8A8A8A);
 }
 
+/// Fonts bundled in assets/fonts (SIL Open Font License).
+class BMFonts {
+  static const ui = 'Outfit';
+  static const mono = 'JetBrainsMono';
+}
+
 ThemeData buildTheme() {
-  final base = ThemeData.dark(useMaterial3: true);
-  return base.copyWith(
+  return ThemeData(
+    brightness: Brightness.dark,
+    useMaterial3: true,
+    fontFamily: BMFonts.ui,
     scaffoldBackgroundColor: BMColors.background,
-    colorScheme: base.colorScheme.copyWith(
+    colorScheme: const ColorScheme.dark(
       primary: BMColors.mango,
       secondary: BMColors.mango,
       surface: BMColors.surface,
       onPrimary: Colors.black,
+      onSurface: BMColors.text,
     ),
     dividerColor: BMColors.border,
+    dividerTheme: const DividerThemeData(color: BMColors.border),
     navigationRailTheme: const NavigationRailThemeData(
       backgroundColor: BMColors.surface,
       indicatorColor: Color(0x33FF8C00),
