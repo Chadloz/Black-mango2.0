@@ -25,6 +25,9 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   bool _saving = false;
   List<String> _notes = [];
   String? _error;
+  String? _testMsg;
+  bool _testOk = false;
+  bool _testing = false;
 
   @override
   void dispose() {
@@ -53,6 +56,35 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
     });
   }
 
+  Future<void> _test() async {
+    setState(() {
+      _testing = true;
+      _testMsg = null;
+    });
+    try {
+      final msg = await Services.catalog.testInputs(
+        type: _type,
+        server: normalizeServer(_server.text),
+        username: _user.text.trim(),
+        password: _pass.text,
+        url: _url.text.trim(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _testOk = true;
+        _testMsg = msg;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _testOk = false;
+        _testMsg = 'Test failed: $e';
+      });
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
   Future<void> _save() async {
     final server = normalizeServer(_server.text);
     final url = _url.text.trim();
@@ -76,7 +108,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
     final fallbackName = hostOf(displayServer);
     final name = _name.text.trim().isNotEmpty ? _name.text.trim() : (fallbackName.isNotEmpty ? fallbackName : 'My Provider');
     try {
-      await Services.accounts.add(
+      final id = await Services.accounts.add(
         type: _type,
         name: name,
         server: displayServer,
@@ -88,7 +120,14 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
-      messenger.showSnackBar(SnackBar(content: Text('Saved "$name"')));
+      messenger.showSnackBar(SnackBar(content: Text('Saved "$name". Loading...')));
+      final account = await Services.accounts.get(id);
+      if (account != null && account.type != 'stalker') {
+        Services.catalog.load(account).then(
+          (msg) => messenger.showSnackBar(SnackBar(content: Text('$name: $msg'))),
+          onError: (e) => messenger.showSnackBar(SnackBar(content: Text('$name: load failed: $e'))),
+        );
+      }
     } catch (e) {
       setState(() {
         _saving = false;
@@ -238,15 +277,24 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                 const SizedBox(height: 12),
                 Text(_error!, style: const TextStyle(color: Colors.redAccent)),
               ],
+              if (_testMsg != null) ...[
+                const SizedBox(height: 12),
+                Text(_testMsg!, style: TextStyle(color: _testOk ? const Color(0xFF4CAF50) : Colors.redAccent)),
+              ],
               const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
                   const SizedBox(width: 8),
+                  OutlinedButton(
+                    onPressed: _testing ? null : _test,
+                    child: Text(_testing ? 'Testing...' : 'Test'),
+                  ),
+                  const SizedBox(width: 8),
                   FilledButton(
                     onPressed: _saving ? null : _save,
-                    child: Text(_saving ? 'Saving...' : 'Save Account'),
+                    child: Text(_saving ? 'Saving...' : 'Save & Load'),
                   ),
                 ],
               ),

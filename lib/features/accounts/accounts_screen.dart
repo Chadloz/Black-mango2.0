@@ -102,6 +102,16 @@ class _AccountCard extends StatelessWidget {
     if (name != null && name.trim().isNotEmpty) await Services.accounts.rename(account.id, name.trim());
   }
 
+  Future<void> _reload(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final msg = await Services.catalog.load(account);
+      messenger.showSnackBar(SnackBar(content: Text('${account.name}: $msg')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('${account.name}: load failed: $e')));
+    }
+  }
+
   Future<void> _delete(BuildContext context) async {
     final yes = await showDialog<bool>(
       context: context,
@@ -149,7 +159,20 @@ class _AccountCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(_host, style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 12, color: BMColors.dim)),
           const SizedBox(height: 4),
-          Text(_counts, style: const TextStyle(fontSize: 13, color: BMColors.dim)),
+          ValueListenableBuilder<Map<String, String>>(
+            valueListenable: Services.catalog.status,
+            builder: (context, st, _) {
+              final msg = st[account.id];
+              if (msg == null) return Text(_counts, style: const TextStyle(fontSize: 13, color: BMColors.dim));
+              return Row(
+                children: [
+                  const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                  const SizedBox(width: 8),
+                  Text(msg, style: const TextStyle(fontSize: 13, color: BMColors.mango)),
+                ],
+              );
+            },
+          ),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -157,6 +180,12 @@ class _AccountCard extends StatelessWidget {
                 onPressed: () => _rename(context),
                 icon: const Icon(Icons.edit, size: 16),
                 label: const Text('Rename'),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: () => _reload(context),
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Reload'),
               ),
               const SizedBox(width: 8),
               OutlinedButton.icon(

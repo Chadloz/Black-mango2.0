@@ -597,15 +597,788 @@ class AccountsCompanion extends UpdateCompanion<Account> {
   }
 }
 
+class $ItemsTable extends Items with TableInfo<$ItemsTable, Item> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ItemsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _accountIdMeta = const VerificationMeta(
+    'accountId',
+  );
+  @override
+  late final GeneratedColumn<String> accountId = GeneratedColumn<String>(
+    'account_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameLowerMeta = const VerificationMeta(
+    'nameLower',
+  );
+  @override
+  late final GeneratedColumn<String> nameLower = GeneratedColumn<String>(
+    'name_lower',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _logoMeta = const VerificationMeta('logo');
+  @override
+  late final GeneratedColumn<String> logo = GeneratedColumn<String>(
+    'logo',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _streamIdMeta = const VerificationMeta(
+    'streamId',
+  );
+  @override
+  late final GeneratedColumn<String> streamId = GeneratedColumn<String>(
+    'stream_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _extMeta = const VerificationMeta('ext');
+  @override
+  late final GeneratedColumn<String> ext = GeneratedColumn<String>(
+    'ext',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _urlMeta = const VerificationMeta('url');
+  @override
+  late final GeneratedColumn<String> url = GeneratedColumn<String>(
+    'url',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<int> position = GeneratedColumn<int>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _genreMeta = const VerificationMeta('genre');
+  @override
+  late final GeneratedColumn<String> genre = GeneratedColumn<String>(
+    'genre',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _countryMeta = const VerificationMeta(
+    'country',
+  );
+  @override
+  late final GeneratedColumn<String> country = GeneratedColumn<String>(
+    'country',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _languageMeta = const VerificationMeta(
+    'language',
+  );
+  @override
+  late final GeneratedColumn<String> language = GeneratedColumn<String>(
+    'language',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    accountId,
+    kind,
+    name,
+    nameLower,
+    category,
+    logo,
+    streamId,
+    ext,
+    url,
+    position,
+    genre,
+    country,
+    language,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'items';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Item> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('account_id')) {
+      context.handle(
+        _accountIdMeta,
+        accountId.isAcceptableOrUnknown(data['account_id']!, _accountIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_accountIdMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('name_lower')) {
+      context.handle(
+        _nameLowerMeta,
+        nameLower.isAcceptableOrUnknown(data['name_lower']!, _nameLowerMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameLowerMeta);
+    }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
+    }
+    if (data.containsKey('logo')) {
+      context.handle(
+        _logoMeta,
+        logo.isAcceptableOrUnknown(data['logo']!, _logoMeta),
+      );
+    }
+    if (data.containsKey('stream_id')) {
+      context.handle(
+        _streamIdMeta,
+        streamId.isAcceptableOrUnknown(data['stream_id']!, _streamIdMeta),
+      );
+    }
+    if (data.containsKey('ext')) {
+      context.handle(
+        _extMeta,
+        ext.isAcceptableOrUnknown(data['ext']!, _extMeta),
+      );
+    }
+    if (data.containsKey('url')) {
+      context.handle(
+        _urlMeta,
+        url.isAcceptableOrUnknown(data['url']!, _urlMeta),
+      );
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    }
+    if (data.containsKey('genre')) {
+      context.handle(
+        _genreMeta,
+        genre.isAcceptableOrUnknown(data['genre']!, _genreMeta),
+      );
+    }
+    if (data.containsKey('country')) {
+      context.handle(
+        _countryMeta,
+        country.isAcceptableOrUnknown(data['country']!, _countryMeta),
+      );
+    }
+    if (data.containsKey('language')) {
+      context.handle(
+        _languageMeta,
+        language.isAcceptableOrUnknown(data['language']!, _languageMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Item map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Item(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      accountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      nameLower: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name_lower'],
+      )!,
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      )!,
+      logo: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}logo'],
+      )!,
+      streamId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}stream_id'],
+      )!,
+      ext: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ext'],
+      )!,
+      url: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}url'],
+      )!,
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}position'],
+      )!,
+      genre: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}genre'],
+      )!,
+      country: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}country'],
+      )!,
+      language: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}language'],
+      )!,
+    );
+  }
+
+  @override
+  $ItemsTable createAlias(String alias) {
+    return $ItemsTable(attachedDatabase, alias);
+  }
+}
+
+class Item extends DataClass implements Insertable<Item> {
+  final int id;
+  final String accountId;
+  final String kind;
+  final String name;
+  final String nameLower;
+  final String category;
+  final String logo;
+  final String streamId;
+  final String ext;
+  final String url;
+  final int position;
+  final String genre;
+  final String country;
+  final String language;
+  const Item({
+    required this.id,
+    required this.accountId,
+    required this.kind,
+    required this.name,
+    required this.nameLower,
+    required this.category,
+    required this.logo,
+    required this.streamId,
+    required this.ext,
+    required this.url,
+    required this.position,
+    required this.genre,
+    required this.country,
+    required this.language,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['account_id'] = Variable<String>(accountId);
+    map['kind'] = Variable<String>(kind);
+    map['name'] = Variable<String>(name);
+    map['name_lower'] = Variable<String>(nameLower);
+    map['category'] = Variable<String>(category);
+    map['logo'] = Variable<String>(logo);
+    map['stream_id'] = Variable<String>(streamId);
+    map['ext'] = Variable<String>(ext);
+    map['url'] = Variable<String>(url);
+    map['position'] = Variable<int>(position);
+    map['genre'] = Variable<String>(genre);
+    map['country'] = Variable<String>(country);
+    map['language'] = Variable<String>(language);
+    return map;
+  }
+
+  ItemsCompanion toCompanion(bool nullToAbsent) {
+    return ItemsCompanion(
+      id: Value(id),
+      accountId: Value(accountId),
+      kind: Value(kind),
+      name: Value(name),
+      nameLower: Value(nameLower),
+      category: Value(category),
+      logo: Value(logo),
+      streamId: Value(streamId),
+      ext: Value(ext),
+      url: Value(url),
+      position: Value(position),
+      genre: Value(genre),
+      country: Value(country),
+      language: Value(language),
+    );
+  }
+
+  factory Item.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Item(
+      id: serializer.fromJson<int>(json['id']),
+      accountId: serializer.fromJson<String>(json['accountId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      name: serializer.fromJson<String>(json['name']),
+      nameLower: serializer.fromJson<String>(json['nameLower']),
+      category: serializer.fromJson<String>(json['category']),
+      logo: serializer.fromJson<String>(json['logo']),
+      streamId: serializer.fromJson<String>(json['streamId']),
+      ext: serializer.fromJson<String>(json['ext']),
+      url: serializer.fromJson<String>(json['url']),
+      position: serializer.fromJson<int>(json['position']),
+      genre: serializer.fromJson<String>(json['genre']),
+      country: serializer.fromJson<String>(json['country']),
+      language: serializer.fromJson<String>(json['language']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'accountId': serializer.toJson<String>(accountId),
+      'kind': serializer.toJson<String>(kind),
+      'name': serializer.toJson<String>(name),
+      'nameLower': serializer.toJson<String>(nameLower),
+      'category': serializer.toJson<String>(category),
+      'logo': serializer.toJson<String>(logo),
+      'streamId': serializer.toJson<String>(streamId),
+      'ext': serializer.toJson<String>(ext),
+      'url': serializer.toJson<String>(url),
+      'position': serializer.toJson<int>(position),
+      'genre': serializer.toJson<String>(genre),
+      'country': serializer.toJson<String>(country),
+      'language': serializer.toJson<String>(language),
+    };
+  }
+
+  Item copyWith({
+    int? id,
+    String? accountId,
+    String? kind,
+    String? name,
+    String? nameLower,
+    String? category,
+    String? logo,
+    String? streamId,
+    String? ext,
+    String? url,
+    int? position,
+    String? genre,
+    String? country,
+    String? language,
+  }) => Item(
+    id: id ?? this.id,
+    accountId: accountId ?? this.accountId,
+    kind: kind ?? this.kind,
+    name: name ?? this.name,
+    nameLower: nameLower ?? this.nameLower,
+    category: category ?? this.category,
+    logo: logo ?? this.logo,
+    streamId: streamId ?? this.streamId,
+    ext: ext ?? this.ext,
+    url: url ?? this.url,
+    position: position ?? this.position,
+    genre: genre ?? this.genre,
+    country: country ?? this.country,
+    language: language ?? this.language,
+  );
+  Item copyWithCompanion(ItemsCompanion data) {
+    return Item(
+      id: data.id.present ? data.id.value : this.id,
+      accountId: data.accountId.present ? data.accountId.value : this.accountId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      name: data.name.present ? data.name.value : this.name,
+      nameLower: data.nameLower.present ? data.nameLower.value : this.nameLower,
+      category: data.category.present ? data.category.value : this.category,
+      logo: data.logo.present ? data.logo.value : this.logo,
+      streamId: data.streamId.present ? data.streamId.value : this.streamId,
+      ext: data.ext.present ? data.ext.value : this.ext,
+      url: data.url.present ? data.url.value : this.url,
+      position: data.position.present ? data.position.value : this.position,
+      genre: data.genre.present ? data.genre.value : this.genre,
+      country: data.country.present ? data.country.value : this.country,
+      language: data.language.present ? data.language.value : this.language,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Item(')
+          ..write('id: $id, ')
+          ..write('accountId: $accountId, ')
+          ..write('kind: $kind, ')
+          ..write('name: $name, ')
+          ..write('nameLower: $nameLower, ')
+          ..write('category: $category, ')
+          ..write('logo: $logo, ')
+          ..write('streamId: $streamId, ')
+          ..write('ext: $ext, ')
+          ..write('url: $url, ')
+          ..write('position: $position, ')
+          ..write('genre: $genre, ')
+          ..write('country: $country, ')
+          ..write('language: $language')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    accountId,
+    kind,
+    name,
+    nameLower,
+    category,
+    logo,
+    streamId,
+    ext,
+    url,
+    position,
+    genre,
+    country,
+    language,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Item &&
+          other.id == this.id &&
+          other.accountId == this.accountId &&
+          other.kind == this.kind &&
+          other.name == this.name &&
+          other.nameLower == this.nameLower &&
+          other.category == this.category &&
+          other.logo == this.logo &&
+          other.streamId == this.streamId &&
+          other.ext == this.ext &&
+          other.url == this.url &&
+          other.position == this.position &&
+          other.genre == this.genre &&
+          other.country == this.country &&
+          other.language == this.language);
+}
+
+class ItemsCompanion extends UpdateCompanion<Item> {
+  final Value<int> id;
+  final Value<String> accountId;
+  final Value<String> kind;
+  final Value<String> name;
+  final Value<String> nameLower;
+  final Value<String> category;
+  final Value<String> logo;
+  final Value<String> streamId;
+  final Value<String> ext;
+  final Value<String> url;
+  final Value<int> position;
+  final Value<String> genre;
+  final Value<String> country;
+  final Value<String> language;
+  const ItemsCompanion({
+    this.id = const Value.absent(),
+    this.accountId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.name = const Value.absent(),
+    this.nameLower = const Value.absent(),
+    this.category = const Value.absent(),
+    this.logo = const Value.absent(),
+    this.streamId = const Value.absent(),
+    this.ext = const Value.absent(),
+    this.url = const Value.absent(),
+    this.position = const Value.absent(),
+    this.genre = const Value.absent(),
+    this.country = const Value.absent(),
+    this.language = const Value.absent(),
+  });
+  ItemsCompanion.insert({
+    this.id = const Value.absent(),
+    required String accountId,
+    required String kind,
+    required String name,
+    required String nameLower,
+    this.category = const Value.absent(),
+    this.logo = const Value.absent(),
+    this.streamId = const Value.absent(),
+    this.ext = const Value.absent(),
+    this.url = const Value.absent(),
+    this.position = const Value.absent(),
+    this.genre = const Value.absent(),
+    this.country = const Value.absent(),
+    this.language = const Value.absent(),
+  }) : accountId = Value(accountId),
+       kind = Value(kind),
+       name = Value(name),
+       nameLower = Value(nameLower);
+  static Insertable<Item> custom({
+    Expression<int>? id,
+    Expression<String>? accountId,
+    Expression<String>? kind,
+    Expression<String>? name,
+    Expression<String>? nameLower,
+    Expression<String>? category,
+    Expression<String>? logo,
+    Expression<String>? streamId,
+    Expression<String>? ext,
+    Expression<String>? url,
+    Expression<int>? position,
+    Expression<String>? genre,
+    Expression<String>? country,
+    Expression<String>? language,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (accountId != null) 'account_id': accountId,
+      if (kind != null) 'kind': kind,
+      if (name != null) 'name': name,
+      if (nameLower != null) 'name_lower': nameLower,
+      if (category != null) 'category': category,
+      if (logo != null) 'logo': logo,
+      if (streamId != null) 'stream_id': streamId,
+      if (ext != null) 'ext': ext,
+      if (url != null) 'url': url,
+      if (position != null) 'position': position,
+      if (genre != null) 'genre': genre,
+      if (country != null) 'country': country,
+      if (language != null) 'language': language,
+    });
+  }
+
+  ItemsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? accountId,
+    Value<String>? kind,
+    Value<String>? name,
+    Value<String>? nameLower,
+    Value<String>? category,
+    Value<String>? logo,
+    Value<String>? streamId,
+    Value<String>? ext,
+    Value<String>? url,
+    Value<int>? position,
+    Value<String>? genre,
+    Value<String>? country,
+    Value<String>? language,
+  }) {
+    return ItemsCompanion(
+      id: id ?? this.id,
+      accountId: accountId ?? this.accountId,
+      kind: kind ?? this.kind,
+      name: name ?? this.name,
+      nameLower: nameLower ?? this.nameLower,
+      category: category ?? this.category,
+      logo: logo ?? this.logo,
+      streamId: streamId ?? this.streamId,
+      ext: ext ?? this.ext,
+      url: url ?? this.url,
+      position: position ?? this.position,
+      genre: genre ?? this.genre,
+      country: country ?? this.country,
+      language: language ?? this.language,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (accountId.present) {
+      map['account_id'] = Variable<String>(accountId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (nameLower.present) {
+      map['name_lower'] = Variable<String>(nameLower.value);
+    }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
+    }
+    if (logo.present) {
+      map['logo'] = Variable<String>(logo.value);
+    }
+    if (streamId.present) {
+      map['stream_id'] = Variable<String>(streamId.value);
+    }
+    if (ext.present) {
+      map['ext'] = Variable<String>(ext.value);
+    }
+    if (url.present) {
+      map['url'] = Variable<String>(url.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<int>(position.value);
+    }
+    if (genre.present) {
+      map['genre'] = Variable<String>(genre.value);
+    }
+    if (country.present) {
+      map['country'] = Variable<String>(country.value);
+    }
+    if (language.present) {
+      map['language'] = Variable<String>(language.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ItemsCompanion(')
+          ..write('id: $id, ')
+          ..write('accountId: $accountId, ')
+          ..write('kind: $kind, ')
+          ..write('name: $name, ')
+          ..write('nameLower: $nameLower, ')
+          ..write('category: $category, ')
+          ..write('logo: $logo, ')
+          ..write('streamId: $streamId, ')
+          ..write('ext: $ext, ')
+          ..write('url: $url, ')
+          ..write('position: $position, ')
+          ..write('genre: $genre, ')
+          ..write('country: $country, ')
+          ..write('language: $language')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $AccountsTable accounts = $AccountsTable(this);
+  late final $ItemsTable items = $ItemsTable(this);
+  late final Index itemsAccountKind = Index(
+    'items_account_kind',
+    'CREATE INDEX items_account_kind ON items (account_id, kind)',
+  );
+  late final Index itemsKindName = Index(
+    'items_kind_name',
+    'CREATE INDEX items_kind_name ON items (kind, name_lower)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [accounts];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+    accounts,
+    items,
+    itemsAccountKind,
+    itemsKindName,
+  ];
 }
 
 typedef $$AccountsTableCreateCompanionBuilder = AccountsCompanion Function({
@@ -908,10 +1681,377 @@ typedef $$AccountsTableProcessedTableManager =
       Account,
       PrefetchHooks Function()
     >;
+typedef $$ItemsTableCreateCompanionBuilder = ItemsCompanion Function({
+  Value<int> id,
+  required String accountId,
+  required String kind,
+  required String name,
+  required String nameLower,
+  Value<String> category,
+  Value<String> logo,
+  Value<String> streamId,
+  Value<String> ext,
+  Value<String> url,
+  Value<int> position,
+  Value<String> genre,
+  Value<String> country,
+  Value<String> language,
+});
+typedef $$ItemsTableUpdateCompanionBuilder = ItemsCompanion Function({
+  Value<int> id,
+  Value<String> accountId,
+  Value<String> kind,
+  Value<String> name,
+  Value<String> nameLower,
+  Value<String> category,
+  Value<String> logo,
+  Value<String> streamId,
+  Value<String> ext,
+  Value<String> url,
+  Value<int> position,
+  Value<String> genre,
+  Value<String> country,
+  Value<String> language,
+});
+
+class $$ItemsTableFilterComposer extends Composer<_$AppDatabase, $ItemsTable> {
+  $$ItemsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get nameLower => $composableBuilder(
+    column: $table.nameLower,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get logo => $composableBuilder(
+    column: $table.logo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get streamId => $composableBuilder(
+    column: $table.streamId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ext => $composableBuilder(
+    column: $table.ext,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get url => $composableBuilder(
+    column: $table.url,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get genre => $composableBuilder(
+    column: $table.genre,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get country => $composableBuilder(
+    column: $table.country,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get language => $composableBuilder(
+    column: $table.language,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ItemsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ItemsTable> {
+  $$ItemsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get nameLower => $composableBuilder(
+    column: $table.nameLower,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get logo => $composableBuilder(
+    column: $table.logo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get streamId => $composableBuilder(
+    column: $table.streamId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ext => $composableBuilder(
+    column: $table.ext,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get url => $composableBuilder(
+    column: $table.url,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get genre => $composableBuilder(
+    column: $table.genre,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get country => $composableBuilder(
+    column: $table.country,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get language => $composableBuilder(
+    column: $table.language,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ItemsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ItemsTable> {
+  $$ItemsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get accountId =>
+      $composableBuilder(column: $table.accountId, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get nameLower =>
+      $composableBuilder(column: $table.nameLower, builder: (column) => column);
+
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
+
+  GeneratedColumn<String> get logo =>
+      $composableBuilder(column: $table.logo, builder: (column) => column);
+
+  GeneratedColumn<String> get streamId =>
+      $composableBuilder(column: $table.streamId, builder: (column) => column);
+
+  GeneratedColumn<String> get ext =>
+      $composableBuilder(column: $table.ext, builder: (column) => column);
+
+  GeneratedColumn<String> get url =>
+      $composableBuilder(column: $table.url, builder: (column) => column);
+
+  GeneratedColumn<int> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+
+  GeneratedColumn<String> get genre =>
+      $composableBuilder(column: $table.genre, builder: (column) => column);
+
+  GeneratedColumn<String> get country =>
+      $composableBuilder(column: $table.country, builder: (column) => column);
+
+  GeneratedColumn<String> get language =>
+      $composableBuilder(column: $table.language, builder: (column) => column);
+}
+
+class $$ItemsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ItemsTable,
+          Item,
+          $$ItemsTableFilterComposer,
+          $$ItemsTableOrderingComposer,
+          $$ItemsTableAnnotationComposer,
+          $$ItemsTableCreateCompanionBuilder,
+          $$ItemsTableUpdateCompanionBuilder,
+          (Item, BaseReferences<_$AppDatabase, $ItemsTable, Item>),
+          Item,
+          PrefetchHooks Function()
+        > {
+  $$ItemsTableTableManager(_$AppDatabase db, $ItemsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ItemsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ItemsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ItemsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> accountId = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> nameLower = const Value.absent(),
+                Value<String> category = const Value.absent(),
+                Value<String> logo = const Value.absent(),
+                Value<String> streamId = const Value.absent(),
+                Value<String> ext = const Value.absent(),
+                Value<String> url = const Value.absent(),
+                Value<int> position = const Value.absent(),
+                Value<String> genre = const Value.absent(),
+                Value<String> country = const Value.absent(),
+                Value<String> language = const Value.absent(),
+              }) => ItemsCompanion(
+                id: id,
+                accountId: accountId,
+                kind: kind,
+                name: name,
+                nameLower: nameLower,
+                category: category,
+                logo: logo,
+                streamId: streamId,
+                ext: ext,
+                url: url,
+                position: position,
+                genre: genre,
+                country: country,
+                language: language,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String accountId,
+                required String kind,
+                required String name,
+                required String nameLower,
+                Value<String> category = const Value.absent(),
+                Value<String> logo = const Value.absent(),
+                Value<String> streamId = const Value.absent(),
+                Value<String> ext = const Value.absent(),
+                Value<String> url = const Value.absent(),
+                Value<int> position = const Value.absent(),
+                Value<String> genre = const Value.absent(),
+                Value<String> country = const Value.absent(),
+                Value<String> language = const Value.absent(),
+              }) => ItemsCompanion.insert(
+                id: id,
+                accountId: accountId,
+                kind: kind,
+                name: name,
+                nameLower: nameLower,
+                category: category,
+                logo: logo,
+                streamId: streamId,
+                ext: ext,
+                url: url,
+                position: position,
+                genre: genre,
+                country: country,
+                language: language,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$ItemsTable, Item>(table),
+                  BaseReferences<_$AppDatabase, $ItemsTable, Item>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ItemsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ItemsTable,
+      Item,
+      $$ItemsTableFilterComposer,
+      $$ItemsTableOrderingComposer,
+      $$ItemsTableAnnotationComposer,
+      $$ItemsTableCreateCompanionBuilder,
+      $$ItemsTableUpdateCompanionBuilder,
+      (Item, BaseReferences<_$AppDatabase, $ItemsTable, Item>),
+      Item,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
   $$AccountsTableTableManager get accounts =>
       $$AccountsTableTableManager(_db, _db.accounts);
+  $$ItemsTableTableManager get items =>
+      $$ItemsTableTableManager(_db, _db.items);
 }

@@ -12,6 +12,9 @@ class AccountRepository {
   Stream<List<Account>> watchAll() =>
       (db.select(db.accounts)..orderBy([(a) => OrderingTerm.asc(a.createdAt)])).watch();
 
+  Future<Account?> get(String id) =>
+      (db.select(db.accounts)..where((a) => a.id.equals(id))).getSingleOrNull();
+
   Future<String> add({
     required String type,
     required String name,
@@ -40,7 +43,16 @@ class AccountRepository {
     await (db.update(db.accounts)..where((a) => a.id.equals(id))).write(AccountsCompanion(name: Value(name)));
   }
 
+  Future<void> updateCounts(String id, int live, int movies, int series) async {
+    await (db.update(db.accounts)..where((a) => a.id.equals(id))).write(AccountsCompanion(
+      liveCount: Value(live),
+      movieCount: Value(movies),
+      seriesCount: Value(series),
+    ));
+  }
+
   Future<void> delete(String id) async {
+    await (db.delete(db.items)..where((t) => t.accountId.equals(id))).go();
     await (db.delete(db.accounts)..where((a) => a.id.equals(id))).go();
     await secrets.delete(_passKey(id));
     await secrets.delete(_urlKey(id));
