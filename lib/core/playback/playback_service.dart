@@ -4,6 +4,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../storage/database.dart';
 import '../accounts/account_repository.dart';
 import '../net/fetch.dart';
+import '../catalog/details.dart';
 
 /// One shared mpv player for the whole app.
 class PlaybackService {
@@ -13,6 +14,7 @@ class PlaybackService {
     // Print mpv's network events (reconnects, drops, timeouts) to the Terminal.
     player.stream.log.listen((l) {
       final t = l.text.toLowerCase();
+      if (t.contains('empty segment')) return; // normal for ad-spliced free channels
       if (t.contains('reconnect') || t.contains('http') || t.contains('end of file') || t.contains('timeout') || t.contains('eof')) {
         debugPrint('[mpv] ${l.prefix}: ${l.text.trim()}');
       }
@@ -62,6 +64,8 @@ class PlaybackService {
     switch (item.kind) {
       case 'movie':
         return '${acct.server}/movie/$u/$p/${item.streamId}.${item.ext.isEmpty ? 'mp4' : item.ext}';
+      case 'episode':
+        return '${acct.server}/series/$u/$p/${item.streamId}.${item.ext.isEmpty ? 'mkv' : item.ext}';
       case 'series':
         throw BMError('Pick an episode to play a show.');
       default:
@@ -71,21 +75,34 @@ class PlaybackService {
 
   /// FFmpeg-level reconnect. Live streams also reconnect at "end of file",
   /// since a live channel only "ends" when the provider drops the connection.
-  Future<void> _configureFor(Item item) async {
+  /// Network settings depend on how the stream arrives.
+  Future<void> _configureFor(Item item, String url) async {
     final np = player.platform;
     if (np is! NativePlayer) return;
-    final live = item.kind == 'live';
+    final path = (Uri.tryParse(url)?.path ?? '').toLowerCase();
+    final isEndlessTs = path.endsWith('.ts') || RegExp(r'/\d+$').hasMatch(path);
+    final isFile = RegExp(r'\.(mkv|mp4|avi|mov|m4v|wmv|flv|webm)$').hasMatch(path);
     await np.setProperty('network-timeout', '15');
-    await np.setProperty(
-      'stream-lavf-o',
-      [
-        'reconnect=1',
-        'reconnect_streamed=1',
-        'reconnect_on_network_error=1',
-        'reconnect_delay_max=5',
-        if (live) 'reconnect_at_eof=1',
-      ].join(','),
-    );
+    if (isEndlessTs || isFile) {
+      // One continuous download: let FFmpeg reconnect on drops.
+      // Live .ts also reconnects at "end of file", since a live channel never truly ends.
+      await np.setProperty(
+        'stream-lavf-o',
+        [
+          'reconnect=1',
+          'reconnect_streamed=1',
+          'reconnect_on_network_error=1',
+          'reconnect_delay_max=5',
+          if (item.kind == 'live' && isEndlessTs) 'reconnect_at_eof=1',
+        ].join(','),
+      );
+      await np.setProperty('demuxer-lavf-o', '');
+    } else {
+      // HLS and redirect links: FFmpeg's reused connections fail on many CDNs,
+      // so use a fresh connection per segment and retry segments instead.
+      await np.setProperty('stream-lavf-o', '');
+      await np.setProperty('demuxer-lavf-o', 'http_persistent=0,seg_max_retry=3,max_reload=10');
+    }
   }
 
   Future<void> play(Item item) async {
@@ -97,8 +114,37 @@ class PlaybackService {
     reconnecting.value = null;
     _lastUrl = url;
     current.value = item;
-    await _configureFor(item);
+    await _configureFor(item, url);
     await player.open(Media(url, httpHeaders: {'User-Agent': bmUserAgent}));
+  }
+
+  /// Plays one episode of a show.
+  Future<void> playEpisode(Item show, EpisodeInfo ep) {
+    final label = 'S${ep.season} E${ep.number}${ep.title.isEmpty ? '' : '  ${ep.title}'}';
+    final item = Item(
+      id: -(int.tryParse(ep.id) ?? ep.id.hashCode.abs()),
+      accountId: show.accountId,
+      kind: 'episode',
+      name: '${show.name}   $label',
+      nameLower: '',
+      category: show.category,
+      logo: ep.image.isNotEmpty ? ep.image : show.logo,
+      streamId: ep.id,
+      ext: ep.ext,
+      url: '',
+      position: 0,
+      genre: show.genre,
+      country: show.country,
+      language: show.language,
+    );
+    return play(item);
+  }
+
+  Future<void> stop() async {
+    current.value = null;
+    reconnecting.value = null;
+    _lastUrl = null;
+    await player.stop();
   }
 
   /// App-level backup reconnect for live streams, throttled like 1.x.
@@ -134,7 +180,9 @@ class PlaybackService {
     _reconnectPending = true;
     reconnecting.value = 'Reconnecting (${_recentReconnects.length}/$_maxReconnects)...';
     debugPrint('[playback] live stream $why, reconnecting');
-    Future.delayed(const Duration(milliseconds: 800), () async {
+    // Back off: 0.8s, 1.6s, 3.2s, 6.4s, then 8s, so the provider can release the old connection.
+    final backoffMs = (800 * (1 << (_recentReconnects.length - 1))).clamp(800, 8000);
+    Future.delayed(Duration(milliseconds: backoffMs), () async {
       _reconnectPending = false;
       if (current.value?.id != item.id) return;
       await player.open(Media(url, httpHeaders: {'User-Agent': bmUserAgent}));

@@ -8,6 +8,7 @@ import '../net/fetch.dart';
 import '../providers/xtream.dart';
 import '../providers/m3u.dart';
 import 'classifier.dart';
+import 'details.dart';
 
 /// Builds database rows from an Xtream list. Top-level so it can run on a background worker.
 List<ItemsCompanion> buildXtreamRows(String accountId, String kind, List<Map> list, Map<String, String> cats,
@@ -18,7 +19,7 @@ List<ItemsCompanion> buildXtreamRows(String accountId, String kind, List<Map> li
     final name = '${m['name'] ?? ''}'.trim();
     if (name.isEmpty) continue;
     final category = cats['${m['category_id']}'] ?? '';
-    final c = classify(category, name);
+    final c = kind == 'live' ? classify(category, name) : classifyVod(category, name);
     rows.add(ItemsCompanion.insert(
       accountId: accountId,
       kind: kind,
@@ -43,10 +44,11 @@ List<ItemsCompanion> buildM3uRows(String accountId, String text) {
   final rows = <ItemsCompanion>[];
   for (var i = 0; i < entries.length; i++) {
     final e = entries[i];
-    final c = classify(e.group, e.name);
+    final kind = kindFromUrl(e.url);
+    final c = kind == 'live' ? classify(e.group, e.name) : classifyVod(e.group, e.name);
     rows.add(ItemsCompanion.insert(
       accountId: accountId,
-      kind: kindFromUrl(e.url),
+      kind: kind,
       name: e.name,
       nameLower: e.name.toLowerCase(),
       category: Value(e.group),
@@ -114,17 +116,33 @@ class CatalogService {
   Future<List<String>> genres(String kind, {Set<String>? accountIds, Set<String>? countries, Set<String>? languages}) async {
     final found = await _distinct(
         db.items.genre, _filter(kind, accountIds: accountIds, countries: countries, languages: languages));
-    return [for (final g in genreOrder) if (found.contains(g)) g];
+    final order = kind == 'live' ? genreOrder : movieGenreOrder;
+    return [for (final g in order) if (found.contains(g)) g];
   }
 
   Future<List<Item>> items(String kind,
-      {Set<String>? accountIds, String? genre, Set<String>? countries, Set<String>? languages, String query = ''}) {
+      {Set<String>? accountIds, String? genre, Set<String>? countries, Set<String>? languages, String query = '', bool byName = false}) {
     final where = _filter(kind,
         accountIds: accountIds, genre: genre, countries: countries, languages: languages, query: query);
     return (db.select(db.items)
           ..where((_) => where)
-          ..orderBy([(x) => OrderingTerm.asc(x.accountId), (x) => OrderingTerm.asc(x.position)]))
+          ..orderBy(byName
+              ? [(x) => OrderingTerm.asc(x.nameLower)]
+              : [(x) => OrderingTerm.asc(x.accountId), (x) => OrderingTerm.asc(x.position)]))
         .get();
+  }
+
+  /// Movie or show info (plot, cast, episodes...). Xtream only; M3U has no extra info.
+  Future<Details> details(Item item) async {
+    final d = Details()..poster = item.logo;
+    if (item.url.isNotEmpty) return d;
+    final acct = await accounts.get(item.accountId);
+    if (acct == null || acct.type != 'xtream') return d;
+    final pass = await accounts.password(acct.id) ?? '';
+    final x = XtreamClient(acct.server, acct.username, pass);
+    final series = item.kind == 'series';
+    final j = series ? await x.seriesInfo(item.streamId) : await x.vodInfo(item.streamId);
+    return parseDetails(j, d, series: series);
   }
 
   // ---------- Test and load ----------

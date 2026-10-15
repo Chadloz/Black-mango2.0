@@ -3,6 +3,7 @@ import '../../app/theme.dart';
 import '../../core/services.dart';
 import '../../core/storage/database.dart';
 import 'add_account_dialog.dart';
+import 'free_channels_dialog.dart';
 
 class AccountsScreen extends StatelessWidget {
   const AccountsScreen({super.key});
@@ -18,6 +19,12 @@ class AccountsScreen extends StatelessWidget {
             children: [
               const Text('Accounts', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: BMColors.text)),
               const Spacer(),
+              OutlinedButton.icon(
+                onPressed: () => showDialog(context: context, builder: (_) => const FreeChannelsDialog()),
+                icon: const Icon(Icons.satellite_alt),
+                label: const Text('Free Channels'),
+              ),
+              const SizedBox(width: 8),
               FilledButton.icon(
                 onPressed: () => showDialog(context: context, builder: (_) => const AddAccountDialog()),
                 icon: const Icon(Icons.add),

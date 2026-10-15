@@ -243,7 +243,17 @@ class _LiveScreenState extends State<LiveScreen> {
         child: Container(
           width: 9,
           alignment: Alignment.center,
-          child: Container(width: 1, color: BMColors.border),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(width: 1, color: BMColors.border),
+              Container(
+                width: 5,
+                height: 44,
+                decoration: BoxDecoration(color: BMColors.dim, borderRadius: BorderRadius.circular(3)),
+              ),
+            ],
+          ),
         ),
       ),
     );

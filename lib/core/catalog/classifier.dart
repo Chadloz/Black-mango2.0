@@ -63,6 +63,47 @@ final _genres = <(String, RegExp)>[
   ('Entertainment', RegExp(r'entertain|general|og[oó]ln|variety|comedy|series|drama|reality|lifestyle', caseSensitive: false)),
 ];
 
+const movieGenreOrder = [
+  'Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family', 'Fantasy',
+  'Horror', 'Music', 'Mystery', 'Romance', 'Sci-Fi', 'Thriller', 'War', 'Western', 'Adult', 'Other',
+];
+
+final _movieGenres = <(String, RegExp)>[
+  ('Adult', RegExp(r'\badult(?!\s*swim)|xxx|18\+|porn', caseSensitive: false)),
+  ('Animation', RegExp(r'anim|cartoon|dibujos', caseSensitive: false)),
+  ('Documentary', RegExp(r'\bdoc|dokument', caseSensitive: false)),
+  ('Horror', RegExp(r'horror|terror|horreur|grusel|paura', caseSensitive: false)),
+  ('Sci-Fi', RegExp(r'sci[\s-]?fi|science fiction|ciencia ficci|fantascienza', caseSensitive: false)),
+  ('Fantasy', RegExp(r'fantas', caseSensitive: false)),
+  ('Comedy', RegExp(r'comed|kom[oö]die|humor|commedia', caseSensitive: false)),
+  ('Action', RegExp(r'action|acci[oó]n|azione', caseSensitive: false)),
+  ('Adventure', RegExp(r'advent|aventur|avventura', caseSensitive: false)),
+  ('Thriller', RegExp(r'thrill|suspens', caseSensitive: false)),
+  ('Crime', RegExp(r'crime|crimen|polic|krimi', caseSensitive: false)),
+  ('Romance', RegExp(r'romanc|romant|\bamor', caseSensitive: false)),
+  ('War', RegExp(r'\bwar\b|guerra|krieg|guerre|militar', caseSensitive: false)),
+  ('Western', RegExp(r'western', caseSensitive: false)),
+  ('Family', RegExp(r'family|famil|kids|enfant|infantil|children', caseSensitive: false)),
+  ('Music', RegExp(r'music|concert', caseSensitive: false)),
+  ('Mystery', RegExp(r'myster|misterio', caseSensitive: false)),
+  ('Drama', RegExp(r'drama', caseSensitive: false)),
+];
+
+/// Movies and shows: genre comes from the provider's category only
+/// (titles like "War of the Worlds" would mislead).
+Classified classifyVod(String category, String name) {
+  var genre = 'Other';
+  for (final g in _movieGenres) {
+    if (g.$2.hasMatch(category)) {
+      genre = g.$1;
+      break;
+    }
+  }
+  var country = _country(category);
+  if (country.isEmpty) country = _country(name);
+  return Classified(genre, country, _lang[country] ?? '');
+}
+
 final _prefixRe = RegExp(r'^\s*[\[\(|]?\s*([A-Za-z]{2,5}(?:-[A-Za-z]{2})?)\s*[\]\)]?\s*[|:\-]');
 
 String _country(String s) {

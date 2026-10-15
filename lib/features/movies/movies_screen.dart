@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import '../../core/widgets/coming_soon.dart';
+import '../../core/widgets/poster_browser.dart';
 
 class MoviesScreen extends StatelessWidget {
   const MoviesScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const ComingSoon(icon: Icons.movie, title: 'Movies', note: 'Your movie library will show up here.');
+    return const PosterBrowser(kind: 'movie', noun: 'movies', playKinds: {'movie'});
   }
 }

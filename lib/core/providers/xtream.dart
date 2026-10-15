@@ -44,6 +44,12 @@ class XtreamClient {
     return map;
   }
 
+  Future<dynamic> vodInfo(String id) =>
+      fetchJson(_api({'action': 'get_vod_info', 'vod_id': id}), timeout: const Duration(seconds: 30));
+
+  Future<dynamic> seriesInfo(String id) =>
+      fetchJson(_api({'action': 'get_series_info', 'series_id': id}), timeout: const Duration(seconds: 30));
+
   Future<List<Map>> list(String action) async {
     final j = await fetchJson(_api({'action': action}), timeout: const Duration(minutes: 3));
     return j is List ? j.whereType<Map>().toList() : <Map>[];
