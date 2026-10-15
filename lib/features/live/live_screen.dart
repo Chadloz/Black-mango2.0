@@ -293,7 +293,27 @@ class _PlayerArea extends StatelessWidget {
       color: Colors.black,
       child: Column(
         children: [
-          Expanded(child: Video(controller: Services.playback.controller)),
+          Expanded(
+            child: Stack(
+              children: [
+                Video(controller: Services.playback.controller),
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: ValueListenableBuilder<String?>(
+                    valueListenable: Services.playback.reconnecting,
+                    builder: (context, msg, _) => msg == null
+                        ? const SizedBox.shrink()
+                        : Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
+                            child: Text(msg, style: const TextStyle(color: BMColors.mango, fontWeight: FontWeight.w600)),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Container(
             width: double.infinity,
             height: 40,

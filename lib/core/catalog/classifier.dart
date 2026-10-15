@@ -9,7 +9,7 @@ class Classified {
 }
 
 const genreOrder = [
-  'Sports', 'Movies', 'Entertainment', 'Kids', 'News', 'Documentary', 'Music', 'Religious', 'Adult', 'Other',
+  'Sports', 'Movies', 'Entertainment', 'Kids', 'Cartoons & Anime', 'News', 'Documentary', 'Music', 'Religious', 'Adult', 'Other',
 ];
 
 const _codes = {
@@ -53,7 +53,8 @@ const _lang = {
 final _genres = <(String, RegExp)>[
   ('Adult', RegExp(r'\badult(?!\s*swim)|xxx|18\+|porn', caseSensitive: false)),
   ('Sports', RegExp(r'sport|football|soccer|f[uú]tbol|\bnba\b|\bnfl\b|\bnhl\b|\bmlb\b|\bufc\b|\bppv\b|\bf1\b|golf|tennis|espn|dazn|laliga|\bliga\b|premier league|bein|wrestl|boxing|cricket|racing|nascar', caseSensitive: false)),
-  ('Kids', RegExp(r'\bkids?\b|child|cartoon|dzieci|infantil|enfant|disney|nick|junior|baby|boomerang|adult\s*swim', caseSensitive: false)),
+  ('Cartoons & Anime', RegExp(r'cartoon|anime|animation|animad|toon|adult\s*swim|boomerang|crunchyroll|funimation', caseSensitive: false)),
+  ('Kids', RegExp(r'\bkids?\b|child|dzieci|infantil|enfant|disney|nick|junior|baby', caseSensitive: false)),
   ('News', RegExp(r'news|noticias|nachrichten|\bcnn\b|msnbc|bloomberg|cnbc|jazeera', caseSensitive: false)),
   ('Documentary', RegExp(r'\bdoc|dokument|discovery|history|nat\s*geo|national geographic|animal planet|science', caseSensitive: false)),
   ('Music', RegExp(r'music|muzyk|m[uú]sica|\bmtv\b|\bvh1\b|radio', caseSensitive: false)),
