@@ -286,6 +286,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 4),
         const Text('Free and open source (GPL-3.0) · github.com/Chadloz/Black-mango2.0',
             style: TextStyle(color: BMColors.dim, fontSize: 13)),
+        _row(
+          'App updates',
+          const OutlinedButton(onPressed: null, child: Text('Check for updates')),
+          sub: 'Automatic updates arrive with the first 2.0 release.',
+        ),
       ],
     );
   }

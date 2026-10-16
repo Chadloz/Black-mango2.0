@@ -9,6 +9,7 @@ import '../../core/widgets/account_picker.dart';
 import '../../core/widgets/filter_menu.dart';
 import '../../core/widgets/track_menu.dart';
 import '../../core/widgets/player_controls.dart';
+import '../../core/epg/epg_service.dart';
 import '../../core/favorites/favorites_service.dart';
 import '../../core/prefs.dart';
 
@@ -479,7 +480,15 @@ class _ChannelRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sub = [item.genre, item.country, item.category].where((s) => s.isNotEmpty).join('  ·  ');
+    return ValueListenableBuilder<int>(
+      valueListenable: Services.epg.changes,
+      builder: (context, _, _) {
+    Services.epg.request(item);
+    final now = Services.epg.nowFor(item);
+    final next = Services.epg.nextFor(item);
+    final sub = now != null
+        ? 'Now: ${now.title} (until ${epgTime(now.end)})${next != null ? '  ·  Next: ${next.title}' : ''}'
+        : [item.genre, item.country, item.category].where((s) => s.isNotEmpty).join('  ·  ');
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -530,6 +539,8 @@ class _ChannelRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+      },
     );
   }
 }

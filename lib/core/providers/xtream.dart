@@ -41,6 +41,14 @@ class XtreamClient {
     return null;
   }
 
+  /// Now / next for one channel (tiny request).
+  Future<List<Map>> shortEpg(String streamId, {int limit = 2}) async {
+    final j = await fetchJson(_api({'action': 'get_short_epg', 'stream_id': streamId, 'limit': '$limit'}),
+        timeout: const Duration(seconds: 15));
+    if (j is Map && j['epg_listings'] is List) return (j['epg_listings'] as List).whereType<Map>().toList();
+    return <Map>[];
+  }
+
   /// category_id -> category name
   Future<Map<String, String>> categories(String action) async {
     final j = await fetchJson(_api({'action': action}));

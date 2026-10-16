@@ -40,6 +40,11 @@ class PlaybackService {
     player.stream.log.listen((l) {
       final t = l.text.toLowerCase();
       if (t.contains('http error 403')) _last403 = DateTime.now();
+      final hm = RegExp(r'http error (\d{3})').firstMatch(t);
+      if (hm != null) {
+        _lastHttpCode = int.tryParse(hm.group(1)!);
+        _lastHttpAt = DateTime.now();
+      }
       if (t.contains('empty segment')) return; // normal for ad-spliced free channels
       if (t.contains('reconnect') || t.contains('http') || t.contains('end of file') || t.contains('timeout') || t.contains('eof')) {
         debugPrint('[mpv] ${l.prefix}: ${l.text.trim()}');
@@ -69,6 +74,7 @@ class PlaybackService {
       if (p > const Duration(seconds: 1) && !_started) {
         _started = true;
         _openFailsInRow = 0;
+        reconnecting.value = null; // a working stream never keeps an old warning
         final h = Uri.tryParse(_lastUrl ?? '')?.host ?? '';
         if (h.isNotEmpty) health?.ok(h);
       }
@@ -98,6 +104,8 @@ class PlaybackService {
   String? _lastUrl;
   bool _started = false; // true once the stream has actually played
   DateTime? _last403;
+  int? _lastHttpCode; // last HTTP error status seen (404, 502...)
+  DateTime? _lastHttpAt;
   bool _shuttingDown = false; // a server just refused us (often the one-connection limit)
   int _startRetries = 0;
   bool _reconnectPending = false;
@@ -169,10 +177,14 @@ class PlaybackService {
     if (host.isNotEmpty) _triedHosts.add(host);
     // Known-down server: go straight to a backup instead of waiting on it.
     if (!isFailover && item.kind == 'live' && host.isNotEmpty && (health?.isDown(host) ?? false) && catalog != null) {
-      current.value = item;
-      reconnecting.value = 'Server down, finding a backup...';
-      _failoverOrGiveUp(item, 'This server is down right now. Try again later or pick another channel.');
-      return;
+      final alts = await catalog!.failoverCandidates(item, _triedAccounts, excludeHosts: {..._triedHosts, ...?health?.downHosts});
+      if (alts.isNotEmpty) {
+        current.value = item;
+        reconnecting.value = 'Server down, finding a backup...';
+        _failoverOrGiveUp(item, 'This server is down right now. Try again later or pick another channel.');
+        return;
+      }
+      // No backup anywhere: try this server anyway instead of refusing.
     }
     await _saveProgress();
     final resumeAt = item.kind == 'live' ? null : await history?.resumePosition(item);
@@ -383,7 +395,13 @@ class PlaybackService {
     final was403 = _last403 != null && DateTime.now().difference(_last403!) < const Duration(seconds: 10);
     if (was403) _busyInRow++;
     // A 403 means the server is up but still holding our old connection: not a dead server.
-    if (why.contains('Failed to open') && !was403) {
+    // A 4xx answer (404 missing channel, 403 busy) proves the server is up: don't count it as down.
+    final code = _lastHttpCode ?? 0;
+    final was4xx = _lastHttpAt != null &&
+        DateTime.now().difference(_lastHttpAt!) < const Duration(seconds: 10) &&
+        code >= 400 &&
+        code < 500;
+    if (why.contains('Failed to open') && !was403 && !was4xx) {
       final h = Uri.tryParse(_lastUrl ?? '')?.host ?? '';
       if (h.isNotEmpty) health?.fail(h, _lastUrl ?? '');
       _openFailsInRow++;

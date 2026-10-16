@@ -6,6 +6,7 @@ import 'playback/playback_service.dart';
 import 'favorites/favorites_service.dart';
 import 'history/history_service.dart';
 import 'playback/server_health.dart';
+import 'epg/epg_service.dart';
 
 /// App-wide services, created once at startup.
 class Services {
@@ -16,6 +17,7 @@ class Services {
   static late final FavoritesService favorites;
   static late final HistoryService history;
   static late final ServerHealth health;
+  static late final EpgService epg;
 
   static void init() {
     db = AppDatabase();
@@ -28,5 +30,6 @@ class Services {
     playback.catalog = catalog;
     health = ServerHealth();
     playback.health = health;
+    epg = EpgService(accounts);
   }
 }
