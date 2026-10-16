@@ -119,7 +119,9 @@ class _LiveScreenState extends State<LiveScreen> {
   void _revealCurrent() {
     final cur = Services.playback.current.value;
     if (cur == null || !_scroll.hasClients) return;
-    final i = _items.indexWhere((x) => x.id == cur.id);
+    var i = _items.indexWhere((x) => x.id == cur.id);
+    final origin = Services.playback.failoverOrigin;
+    if (i < 0 && origin != null) i = _items.indexWhere((x) => x.id == origin.id);
     if (i < 0) return;
     const rowH = 60.0;
     final pos = i * rowH;
@@ -342,7 +344,7 @@ class _LiveScreenState extends State<LiveScreen> {
           index: i,
           item: it,
           accountName: _acctNames[it.accountId] ?? '',
-          active: cur?.id == it.id,
+          active: cur?.id == it.id || Services.playback.failoverOrigin?.id == it.id,
           onTap: () => _play(it),
           numberWidth: numberWidth,
           isFav: _favKeys.contains(favKey(it)),

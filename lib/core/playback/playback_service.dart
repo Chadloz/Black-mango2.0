@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../history/history_service.dart';
+import '../catalog/catalog_service.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../storage/database.dart';
@@ -14,6 +15,10 @@ class PlaybackService {
 
   /// Set by Services at startup.
   HistoryService? history;
+  CatalogService? catalog;
+  final Set<String> _triedAccounts = {};
+  /// The channel you actually picked, when failover switched to a backup (for highlighting).
+  Item? failoverOrigin;
 
   PlaybackService(this.accounts) {
     // Save movie/episode progress every 10 seconds while playing.
@@ -24,6 +29,7 @@ class PlaybackService {
     // Print mpv's network events (reconnects, drops, timeouts) to the Terminal.
     player.stream.log.listen((l) {
       final t = l.text.toLowerCase();
+      if (t.contains('http error 403')) _last403 = DateTime.now();
       if (t.contains('empty segment')) return; // normal for ad-spliced free channels
       if (t.contains('reconnect') || t.contains('http') || t.contains('end of file') || t.contains('timeout') || t.contains('eof')) {
         debugPrint('[mpv] ${l.prefix}: ${l.text.trim()}');
@@ -33,7 +39,21 @@ class PlaybackService {
     player.stream.completed.listen((done) {
       if (done) _onDropped('ended');
     });
-    player.stream.error.listen((e) => _onDropped('error: $e'));
+    // Only real failures count. Decoding hiccups like "Error decoding audio" are normal in the
+    // first moments of a live stream and mpv recovers on its own. Reopening for them restarts
+    // the connection for nothing (and trips one-connection limits).
+    player.stream.error.listen((e) {
+      final t = e.toLowerCase();
+      final fatal = t.contains('failed to open') ||
+          t.contains('failed to recognize') ||
+          t.contains('loading failed') ||
+          t.contains('no video or audio');
+      if (fatal) {
+        _onDropped('error: $e');
+      } else {
+        debugPrint('[playback] ignored non-fatal: $e');
+      }
+    });
     // Once playback passes one second, the stream counts as started.
     player.stream.position.listen((p) {
       if (p > const Duration(seconds: 1)) _started = true;
@@ -58,6 +78,8 @@ class PlaybackService {
 
   String? _lastUrl;
   bool _started = false; // true once the stream has actually played
+  DateTime? _last403;
+  bool _shuttingDown = false; // a server just refused us (often the one-connection limit)
   int _startRetries = 0;
   bool _reconnectPending = false;
   final List<DateTime> _recentReconnects = [];
@@ -115,7 +137,12 @@ class PlaybackService {
     }
   }
 
-  Future<void> play(Item item, {bool autoplay = true}) async {
+  Future<void> play(Item item, {bool autoplay = true, bool isFailover = false}) async {
+    if (!isFailover) {
+      _triedAccounts.clear();
+      failoverOrigin = null;
+    }
+    _triedAccounts.add(item.accountId);
     final url = await urlFor(item);
     await _saveProgress();
     final resumeAt = item.kind == 'live' ? null : await history?.resumePosition(item);
@@ -157,12 +184,50 @@ class PlaybackService {
     return play(item);
   }
 
+  /// App is quitting: save progress and hang up cleanly so the provider releases the connection.
+  /// Keeps the session info, so the next launch can restore it.
+  Future<void> shutdown() async {
+    _shuttingDown = true;
+    await _saveProgress();
+    try {
+      await player.stop();
+    } catch (_) {}
+  }
+
   Future<void> stop() async {
     await _saveProgress();
+    failoverOrigin = null;
     current.value = null;
     reconnecting.value = null;
     _lastUrl = null;
     await player.stop();
+  }
+
+  /// Tries the same channel on another account before showing an error.
+  Future<void> _failoverOrGiveUp(Item item, String giveUpMsg) async {
+    final cat = catalog;
+    if (item.kind != 'live' || cat == null || _triedAccounts.length >= 4) {
+      reconnecting.value = giveUpMsg;
+      return;
+    }
+    _reconnectPending = true;
+    final alts = await cat.failoverCandidates(item, _triedAccounts);
+    _reconnectPending = false;
+    if (current.value?.id != item.id) return; // you already picked something else
+    if (alts.isEmpty) {
+      reconnecting.value = giveUpMsg;
+      return;
+    }
+    final alt = alts.first;
+    final acctName = (await accounts.get(alt.accountId))?.name ?? 'another account';
+    debugPrint('[playback] failover: ${item.name} -> ${alt.name} on $acctName');
+    failoverOrigin ??= item;
+    try {
+      await play(alt, isFailover: true);
+      reconnecting.value = 'Trying ${alt.name} on $acctName...';
+    } catch (_) {
+      reconnecting.value = giveUpMsg;
+    }
   }
 
   Future<void> _saveProgress() async {
@@ -190,20 +255,25 @@ class PlaybackService {
 
   /// App-level backup reconnect for live streams, throttled like 1.x.
   void _onDropped(String why) {
+    if (_shuttingDown) return;
     final item = current.value;
     final url = _lastUrl;
     if (item == null || url == null || item.kind != 'live' || _reconnectPending) return;
     // Never got going: one retry (covers one-connection-limit providers), then give up clearly.
     if (!_started) {
-      if (_startRetries >= 1) {
-        reconnecting.value = "This channel isn't working right now. Try another one.";
+      // A 403 usually means our old connection is still open, so be patient before failing over.
+      final just403 = _last403 != null && DateTime.now().difference(_last403!) < const Duration(seconds: 10);
+      if (_startRetries >= (just403 ? 3 : 1)) {
+        _failoverOrGiveUp(item, "This channel isn't working right now. Try another one.");
         return;
       }
       _startRetries++;
       _reconnectPending = true;
       reconnecting.value = 'Retrying...';
       debugPrint('[playback] stream did not start ($why), one retry in 2.5s');
-      Future.delayed(const Duration(milliseconds: 2500), () async {
+      // After a 403, give the provider longer to release the old connection.
+      final recent403 = _last403 != null && DateTime.now().difference(_last403!) < const Duration(seconds: 10);
+      Future.delayed(Duration(milliseconds: recent403 ? 4000 * _startRetries : 2500), () async {
         _reconnectPending = false;
         if (current.value?.id != item.id) return;
         await player.open(Media(url, httpHeaders: {'User-Agent': bmUserAgent}));
@@ -214,7 +284,7 @@ class PlaybackService {
     final now = DateTime.now();
     _recentReconnects.removeWhere((t) => now.difference(t) > const Duration(minutes: 1));
     if (_recentReconnects.length >= _maxReconnects) {
-      reconnecting.value = 'Stream unstable. Pick it again or try another channel.';
+      _failoverOrGiveUp(item, 'Stream unstable. Pick it again or try another channel.');
       return;
     }
     _recentReconnects.add(now);

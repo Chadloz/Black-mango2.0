@@ -9,6 +9,7 @@ import '../providers/xtream.dart';
 import '../providers/m3u.dart';
 import 'classifier.dart';
 import 'details.dart';
+import 'name_match.dart';
 
 /// Builds database rows from an Xtream list. Top-level so it can run on a background worker.
 List<ItemsCompanion> buildXtreamRows(String accountId, String kind, List<Map> list, Map<String, String> cats,
@@ -143,6 +144,27 @@ class CatalogService {
     final series = item.kind == 'series';
     final j = series ? await x.seriesInfo(item.streamId) : await x.vodInfo(item.streamId);
     return parseDetails(j, d, series: series);
+  }
+
+  /// The same live channel on other accounts, same country first, one per account.
+  Future<List<Item>> failoverCandidates(Item item, Set<String> exclude) async {
+    final target = normName(item.name);
+    if (target.isEmpty) return [];
+    final words = target.split(' ')..sort((a, b) => b.length.compareTo(a.length));
+    final token = words.first;
+    if (token.length < 2) return [];
+    final rows = await (db.select(db.items)
+          ..where((x) => x.kind.equals('live') & x.accountId.isNotIn(exclude) & x.nameLower.like('%$token%'))
+          ..limit(500))
+        .get();
+    final matches = rows.where((r) => normName(r.name) == target).toList();
+    // Same country, or at least the same language: a Spanish feed shouldn't switch to an English one.
+    if (item.language.isNotEmpty) {
+      matches.removeWhere((r) => r.country != item.country && r.language != item.language);
+    }
+    matches.sort((a, b) => (a.country == item.country ? 0 : 1).compareTo(b.country == item.country ? 0 : 1));
+    final seen = <String>{};
+    return [for (final m in matches) if (seen.add(m.accountId)) m];
   }
 
   // ---------- Test and load ----------

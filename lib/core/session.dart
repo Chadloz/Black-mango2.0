@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' show AppExitResponse;
 import 'package:flutter/widgets.dart';
 import '../app/nav.dart';
 import 'prefs.dart';
@@ -9,10 +10,17 @@ import 'storage/database.dart';
 /// Live channels resume playing; movies and episodes come back paused at your spot.
 /// Closing the video yourself (the X) clears it, so it isn't restored.
 class Session {
+  static AppLifecycleListener? _exit;
+
   static void start() {
     Services.playback.current.addListener(_saveItem);
     AppNav.index.addListener(() => Prefs.setInt('session.screen', AppNav.index.value));
     WidgetsBinding.instance.addPostFrameCallback((_) => _restore());
+    // On quit: save your spot and hang up cleanly before exiting.
+    _exit = AppLifecycleListener(onExitRequested: () async {
+      await Services.playback.shutdown();
+      return AppExitResponse.exit;
+    });
   }
 
   static void _saveItem() {

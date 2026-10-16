@@ -23,5 +23,6 @@ class Services {
     favorites = FavoritesService(db);
     history = HistoryService(db);
     playback.history = history;
+    playback.catalog = catalog;
   }
 }
