@@ -8,6 +8,7 @@ import '../../core/storage/database.dart';
 import '../../core/widgets/account_picker.dart';
 import '../../core/widgets/filter_menu.dart';
 import '../../core/favorites/favorites_service.dart';
+import '../../core/prefs.dart';
 
 String _fmt(int n) => n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
 
@@ -42,6 +43,12 @@ class _LiveScreenState extends State<LiveScreen> {
   @override
   void initState() {
     super.initState();
+    _accounts = Prefs.getSet('live.accounts');
+    _countries = Prefs.getSet('live.countries');
+    _languages = Prefs.getSet('live.languages');
+    _genre = Prefs.getStr('live.genre');
+    _favOnly = Prefs.getBool('live.favOnly');
+    _guideW = Prefs.getDouble('live.guideW');
     Services.playback.current.addListener(_onCurrent);
     _favSub = Services.favorites.watchKeys().listen((k) {
       if (!mounted) return;
@@ -70,8 +77,18 @@ class _LiveScreenState extends State<LiveScreen> {
     super.dispose();
   }
 
+  void _savePrefs() {
+    Prefs.setSet('live.accounts', _accounts);
+    Prefs.setSet('live.countries', _countries);
+    Prefs.setSet('live.languages', _languages);
+    Prefs.setStr('live.genre', _genre);
+    Prefs.setBool('live.favOnly', _favOnly);
+    if (_guideW != null) Prefs.setDouble('live.guideW', _guideW!);
+  }
+
   Future<void> _reload() async {
     final gen = ++_gen;
+    _savePrefs();
     setState(() => _loading = true);
     final cat = Services.catalog;
     final countryOpts = await cat.countries('live', accountIds: _accounts);
@@ -250,6 +267,7 @@ class _LiveScreenState extends State<LiveScreen> {
         onHorizontalDragUpdate: (d) => setState(
           () => _guideW = (current + d.delta.dx).clamp(260.0, max(260.0, total - 320)).toDouble(),
         ),
+        onHorizontalDragEnd: (_) => _savePrefs(),
         child: Container(
           width: 9,
           alignment: Alignment.center,

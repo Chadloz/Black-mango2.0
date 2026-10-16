@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../history/history_service.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../storage/database.dart';
@@ -10,7 +12,15 @@ import '../catalog/details.dart';
 class PlaybackService {
   final AccountRepository accounts;
 
+  /// Set by Services at startup.
+  HistoryService? history;
+
   PlaybackService(this.accounts) {
+    // Save movie/episode progress every 10 seconds while playing.
+    Timer.periodic(const Duration(seconds: 10), (_) {
+      final cur = current.value;
+      if (cur != null && cur.kind != 'live' && player.state.playing) _saveProgress();
+    });
     // Print mpv's network events (reconnects, drops, timeouts) to the Terminal.
     player.stream.log.listen((l) {
       final t = l.text.toLowerCase();
@@ -105,8 +115,10 @@ class PlaybackService {
     }
   }
 
-  Future<void> play(Item item) async {
+  Future<void> play(Item item, {bool autoplay = true}) async {
     final url = await urlFor(item);
+    await _saveProgress();
+    final resumeAt = item.kind == 'live' ? null : await history?.resumePosition(item);
     _recentReconnects.clear();
     _reconnectPending = false;
     _started = false;
@@ -115,7 +127,12 @@ class PlaybackService {
     _lastUrl = url;
     current.value = item;
     await _configureFor(item, url);
-    await player.open(Media(url, httpHeaders: {'User-Agent': bmUserAgent}));
+    await player.open(Media(url, httpHeaders: {'User-Agent': bmUserAgent}), play: autoplay);
+    if (item.kind == 'live') {
+      history?.record(item);
+    } else if (resumeAt != null) {
+      _seekWhenReady(item, resumeAt);
+    }
   }
 
   /// Plays one episode of a show.
@@ -141,10 +158,34 @@ class PlaybackService {
   }
 
   Future<void> stop() async {
+    await _saveProgress();
     current.value = null;
     reconnecting.value = null;
     _lastUrl = null;
     await player.stop();
+  }
+
+  Future<void> _saveProgress() async {
+    final cur = current.value;
+    final h = history;
+    if (cur == null || h == null || cur.kind == 'live') return;
+    final pos = player.state.position;
+    if (pos < const Duration(seconds: 5)) return;
+    await h.record(cur, position: pos, duration: player.state.duration);
+  }
+
+  /// Jumps to the saved spot once the new file reports its length.
+  Future<void> _seekWhenReady(Item item, Duration at) async {
+    await Future.delayed(const Duration(milliseconds: 800));
+    for (var i = 0; i < 60; i++) {
+      if (current.value?.id != item.id) return;
+      if (player.state.duration > Duration.zero) {
+        await player.seek(at);
+        debugPrint('[playback] resumed at ${at.inSeconds}s');
+        return;
+      }
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
   }
 
   /// App-level backup reconnect for live streams, throttled like 1.x.

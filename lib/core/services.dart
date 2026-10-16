@@ -4,6 +4,7 @@ import 'accounts/account_repository.dart';
 import 'catalog/catalog_service.dart';
 import 'playback/playback_service.dart';
 import 'favorites/favorites_service.dart';
+import 'history/history_service.dart';
 
 /// App-wide services, created once at startup.
 class Services {
@@ -12,6 +13,7 @@ class Services {
   static late final CatalogService catalog;
   static late final PlaybackService playback;
   static late final FavoritesService favorites;
+  static late final HistoryService history;
 
   static void init() {
     db = AppDatabase();
@@ -19,5 +21,7 @@ class Services {
     catalog = CatalogService(db, accounts);
     playback = PlaybackService(accounts);
     favorites = FavoritesService(db);
+    history = HistoryService(db);
+    playback.history = history;
   }
 }

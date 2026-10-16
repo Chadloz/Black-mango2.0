@@ -36,6 +36,12 @@ class FilterMenu extends StatelessWidget {
         const Divider(height: 1),
         SubmenuButton(
           menuChildren: [
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.clear, size: 18),
+              onPressed: () => onChanged(<String>{}, selLanguages),
+              child: const Text('Clear'),
+            ),
+            const Divider(height: 1),
             for (final c in countries)
               CheckboxMenuButton(
                 value: selCountries.contains(c),
@@ -48,6 +54,12 @@ class FilterMenu extends StatelessWidget {
         ),
         SubmenuButton(
           menuChildren: [
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.clear, size: 18),
+              onPressed: () => onChanged(selCountries, <String>{}),
+              child: const Text('Clear'),
+            ),
+            const Divider(height: 1),
             for (final l in languages)
               CheckboxMenuButton(
                 value: selLanguages.contains(l),

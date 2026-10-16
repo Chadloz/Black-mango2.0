@@ -54,6 +54,7 @@ class AccountRepository {
   Future<void> delete(String id) async {
     await (db.delete(db.items)..where((t) => t.accountId.equals(id))).go();
     await (db.delete(db.favorites)..where((f) => f.accountId.equals(id))).go();
+    await (db.delete(db.history)..where((h) => h.accountId.equals(id))).go();
     await (db.delete(db.accounts)..where((a) => a.id.equals(id))).go();
     await secrets.delete(_passKey(id));
     await secrets.delete(_urlKey(id));

@@ -10,6 +10,7 @@ import 'player_panel.dart';
 import 'details_panel.dart';
 import '../favorites/favorites_service.dart';
 import '../../app/nav.dart';
+import '../prefs.dart';
 
 String _fmt(int n) => n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
 
@@ -63,6 +64,12 @@ class _PosterBrowserState extends State<PosterBrowser> {
   @override
   void initState() {
     super.initState();
+    final k = widget.kind;
+    _accounts = Prefs.getSet('$k.accounts');
+    _countries = Prefs.getSet('$k.countries');
+    _languages = Prefs.getSet('$k.languages');
+    _genre = Prefs.getStr('$k.genre');
+    _guideW = Prefs.getDouble('$k.guideW');
     AppNav.select.addListener(_onSelectRequest);
     _favSub = Services.favorites.watchKeys().listen((k) {
       if (mounted) setState(() => _favKeys = k);
@@ -99,8 +106,18 @@ class _PosterBrowserState extends State<PosterBrowser> {
     AppNav.select.value = null;
   }
 
+  void _savePrefs() {
+    final k = widget.kind;
+    Prefs.setSet('$k.accounts', _accounts);
+    Prefs.setSet('$k.countries', _countries);
+    Prefs.setSet('$k.languages', _languages);
+    Prefs.setStr('$k.genre', _genre);
+    if (_guideW != null) Prefs.setDouble('$k.guideW', _guideW!);
+  }
+
   Future<void> _reload() async {
     final gen = ++_gen;
+    _savePrefs();
     setState(() => _loading = true);
     final cat = Services.catalog;
     final k = widget.kind;
@@ -197,6 +214,7 @@ class _PosterBrowserState extends State<PosterBrowser> {
         onHorizontalDragUpdate: (d) => setState(
           () => _guideW = (current + d.delta.dx).clamp(300.0, max(300.0, total - 320)).toDouble(),
         ),
+        onHorizontalDragEnd: (_) => _savePrefs(),
         child: Container(
           width: 9,
           alignment: Alignment.center,

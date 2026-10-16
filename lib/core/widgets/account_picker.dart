@@ -18,6 +18,12 @@ class AccountPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     return MenuAnchor(
       menuChildren: [
+        if (selected.isNotEmpty)
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.clear, size: 18),
+            onPressed: () => onChanged(<String>{}),
+            child: const Text('Clear selection'),
+          ),
         MenuItemButton(
           onPressed: () => onChanged(<String>{}),
           leadingIcon: selected.isEmpty

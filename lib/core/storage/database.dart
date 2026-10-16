@@ -55,12 +55,32 @@ class Favorites extends Table {
   DateTimeColumn get addedAt => dateTime()();
 }
 
-@DriftDatabase(tables: [Accounts, Items, Favorites])
+/// Watch history: recent channels, plus resume positions for movies and episodes.
+/// Stores enough to replay a title directly (episodes have no catalog row).
+@DataClassName('WatchEntry')
+class History extends Table {
+  TextColumn get entryKey => text()(); // accountId|kind|streamId-or-url
+  TextColumn get accountId => text()();
+  TextColumn get kind => text()(); // live | movie | episode | series
+  TextColumn get name => text()();
+  TextColumn get logo => text().withDefault(const Constant(''))();
+  TextColumn get streamId => text().withDefault(const Constant(''))();
+  TextColumn get ext => text().withDefault(const Constant(''))();
+  TextColumn get url => text().withDefault(const Constant(''))();
+  IntColumn get positionMs => integer().withDefault(const Constant(0))();
+  IntColumn get durationMs => integer().withDefault(const Constant(0))();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {entryKey};
+}
+
+@DriftDatabase(tables: [Accounts, Items, Favorites, History])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'black_mango'));
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -83,6 +103,11 @@ class AppDatabase extends _$AppDatabase {
           if (from < 4) {
             final t = await customSelect("SELECT name FROM sqlite_master WHERE type='table' AND name='favorites'").get();
             if (t.isEmpty) await m.createTable(favorites);
+          }
+          // v5 adds History. Only creates it if it isn't there yet.
+          if (from < 5) {
+            final t = await customSelect("SELECT name FROM sqlite_master WHERE type='table' AND name='history'").get();
+            if (t.isEmpty) await m.createTable(history);
           }
         },
       );
