@@ -43,30 +43,46 @@ class Items extends Table {
   TextColumn get language => text().withDefault(const Constant(''))();
 }
 
-@DriftDatabase(tables: [Accounts, Items])
+/// Starred channels, movies, and shows. Keyed by the provider's stream ID
+/// (or link for M3U), so favorites survive account reloads.
+class Favorites extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get accountId => text()();
+  TextColumn get kind => text()(); // live | movie | series
+  TextColumn get itemKey => text()();
+  TextColumn get name => text()();
+  TextColumn get logo => text().withDefault(const Constant(''))();
+  DateTimeColumn get addedAt => dateTime()();
+}
+
+@DriftDatabase(tables: [Accounts, Items, Favorites])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'black_mango'));
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
         onUpgrade: (m, from, to) async {
-          // v2 adds the Items table. Existing accounts are kept.
+          // Very old database: create everything at once.
           if (from < 2) {
             await m.createAll();
             return;
           }
-          // v3 adds genre, country, language. Only adds columns that are missing,
-          // so it is safe even if an earlier attempt got partway.
+          // v3 adds genre, country, language. Only adds what's missing.
           if (from < 3) {
             final rows = await customSelect("PRAGMA table_info('items')").get();
             final cols = rows.map((r) => r.read<String>('name')).toSet();
             if (!cols.contains('genre')) await m.addColumn(items, items.genre);
             if (!cols.contains('country')) await m.addColumn(items, items.country);
             if (!cols.contains('language')) await m.addColumn(items, items.language);
+          }
+          // v4 adds Favorites. Only creates it if it isn't there yet.
+          if (from < 4) {
+            final t = await customSelect("SELECT name FROM sqlite_master WHERE type='table' AND name='favorites'").get();
+            if (t.isEmpty) await m.createTable(favorites);
           }
         },
       );

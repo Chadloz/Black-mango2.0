@@ -3,6 +3,7 @@ import '../../app/theme.dart';
 import '../services.dart';
 import '../storage/database.dart';
 import '../catalog/details.dart';
+import '../favorites/favorites_service.dart';
 
 /// Right-side info panel for a movie or show: poster, info, Play, and episodes.
 class DetailsPanel extends StatefulWidget {
@@ -156,6 +157,17 @@ class _DetailsPanelState extends State<DetailsPanel> {
                                 icon: const Icon(Icons.play_arrow),
                                 label: const Text('Play'),
                               ),
+                            StreamBuilder<Set<String>>(
+                              stream: Services.favorites.watchKeys(),
+                              builder: (context, snap) {
+                                final fav = (snap.data ?? const <String>{}).contains(favKey(widget.item));
+                                return OutlinedButton.icon(
+                                  onPressed: () => Services.favorites.toggle(widget.item),
+                                  icon: Icon(fav ? Icons.star : Icons.star_border, color: BMColors.mango),
+                                  label: Text(fav ? 'Favorited' : 'Favorite'),
+                                );
+                              },
+                            ),
                             if (widget.onBackToVideo != null)
                               OutlinedButton.icon(
                                 onPressed: widget.onBackToVideo,

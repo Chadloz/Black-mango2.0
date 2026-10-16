@@ -7,6 +7,7 @@ import '../../core/services.dart';
 import '../../core/storage/database.dart';
 import '../../core/widgets/account_picker.dart';
 import '../../core/widgets/filter_menu.dart';
+import '../../core/favorites/favorites_service.dart';
 
 String _fmt(int n) => n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
 
@@ -33,12 +34,20 @@ class _LiveScreenState extends State<LiveScreen> {
   Timer? _debounce;
   StreamSubscription<List<Account>>? _acctSub;
   final _scroll = ScrollController();
+  Set<String> _favKeys = {};
+  bool _favOnly = false;
+  StreamSubscription<Set<String>>? _favSub;
   double? _guideW; // guide width while playing, set by dragging the divider
 
   @override
   void initState() {
     super.initState();
     Services.playback.current.addListener(_onCurrent);
+    _favSub = Services.favorites.watchKeys().listen((k) {
+      if (!mounted) return;
+      setState(() => _favKeys = k);
+      if (_favOnly) _reload();
+    });
     // Refresh whenever accounts change (added, renamed, deleted, or reloaded).
     _acctSub = Services.accounts.watchAll().listen((list) {
       if (!mounted) return;
@@ -55,6 +64,7 @@ class _LiveScreenState extends State<LiveScreen> {
   void dispose() {
     _debounce?.cancel();
     _acctSub?.cancel();
+    _favSub?.cancel();
     Services.playback.current.removeListener(_onCurrent);
     _scroll.dispose();
     super.dispose();
@@ -80,7 +90,7 @@ class _LiveScreenState extends State<LiveScreen> {
       _languages = languages;
       _genres = genres;
       _genre = genre;
-      _items = items;
+      _items = _favOnly ? items.where((x) => _favKeys.contains(favKey(x))).toList() : items;
       _loading = false;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _revealCurrent());
@@ -266,13 +276,26 @@ class _LiveScreenState extends State<LiveScreen> {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         children: [
-          _Pill(label: 'All', selected: _genre == null, onTap: () {
-            setState(() => _genre = null);
+          _Pill(label: 'All', selected: _genre == null && !_favOnly, onTap: () {
+            setState(() {
+              _genre = null;
+              _favOnly = false;
+            });
+            _reload();
+          }),
+          _Pill(label: '★ Favorites', selected: _favOnly, onTap: () {
+            setState(() {
+              _favOnly = true;
+              _genre = null;
+            });
             _reload();
           }),
           for (final g in _genres)
             _Pill(label: g, selected: _genre == g, onTap: () {
-              setState(() => _genre = g);
+              setState(() {
+                _genre = g;
+                _favOnly = false;
+              });
               _reload();
             }),
         ],
@@ -304,6 +327,8 @@ class _LiveScreenState extends State<LiveScreen> {
           active: cur?.id == it.id,
           onTap: () => _play(it),
           numberWidth: numberWidth,
+          isFav: _favKeys.contains(favKey(it)),
+          onFav: () => Services.favorites.toggle(it),
         );
       },
     );
@@ -401,7 +426,9 @@ class _ChannelRow extends StatelessWidget {
   final bool active;
   final VoidCallback onTap;
   final double numberWidth;
-  const _ChannelRow({required this.index, required this.item, required this.accountName, required this.active, required this.onTap, required this.numberWidth});
+  final bool isFav;
+  final VoidCallback onFav;
+  const _ChannelRow({required this.index, required this.item, required this.accountName, required this.active, required this.onTap, required this.numberWidth, required this.isFav, required this.onFav});
 
   @override
   Widget build(BuildContext context) {
@@ -447,6 +474,11 @@ class _ChannelRow extends StatelessWidget {
               ),
             ),
             if (active) const Icon(Icons.graphic_eq, color: BMColors.mango, size: 18),
+            IconButton(
+              tooltip: isFav ? 'Remove from favorites' : 'Add to favorites',
+              onPressed: onFav,
+              icon: Icon(isFav ? Icons.star : Icons.star_border, color: isFav ? BMColors.mango : BMColors.dim, size: 20),
+            ),
           ],
         ),
       ),

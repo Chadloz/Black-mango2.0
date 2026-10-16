@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
+import 'nav.dart';
 import '../core/widgets/wordmark.dart';
 import '../features/home/home_screen.dart';
 import '../features/live/live_screen.dart';
@@ -31,6 +32,20 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> {
   int _index = 0;
   bool _expanded = true;
+
+  @override
+  void initState() {
+    super.initState();
+    AppNav.index.addListener(_onNav);
+  }
+
+  @override
+  void dispose() {
+    AppNav.index.removeListener(_onNav);
+    super.dispose();
+  }
+
+  void _onNav() => setState(() => _index = AppNav.index.value);
 
   // Sidebar layout. Items appear in the same order as _screens below.
   static const _nav = [
@@ -73,7 +88,7 @@ class _ShellState extends State<Shell> {
                   entries: _nav,
                   selected: _index,
                   expanded: _expanded,
-                  onSelect: (i) => setState(() => _index = i),
+                  onSelect: (i) => AppNav.index.value = i,
                 ),
                 const VerticalDivider(width: 1),
                 Expanded(child: IndexedStack(index: _index, children: _screens)),

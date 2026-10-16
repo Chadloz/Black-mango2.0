@@ -8,6 +8,8 @@ import 'account_picker.dart';
 import 'filter_menu.dart';
 import 'player_panel.dart';
 import 'details_panel.dart';
+import '../favorites/favorites_service.dart';
+import '../../app/nav.dart';
 
 String _fmt(int n) => n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
 
@@ -52,6 +54,8 @@ class _PosterBrowserState extends State<PosterBrowser> {
   final _scroll = ScrollController();
   double? _guideW;
   Item? _selected; // title whose details are open
+  Set<String> _favKeys = {};
+  StreamSubscription<Set<String>>? _favSub;
   bool _showVideo = false; // right pane: video (true) or details (false)
   int _cols = 1;
   double _rowExtent = 300;
@@ -59,6 +63,10 @@ class _PosterBrowserState extends State<PosterBrowser> {
   @override
   void initState() {
     super.initState();
+    AppNav.select.addListener(_onSelectRequest);
+    _favSub = Services.favorites.watchKeys().listen((k) {
+      if (mounted) setState(() => _favKeys = k);
+    });
     _acctSub = Services.accounts.watchAll().listen((list) {
       if (!mounted) return;
       final names = {for (final a in list) a.id: a.name};
@@ -74,8 +82,21 @@ class _PosterBrowserState extends State<PosterBrowser> {
   void dispose() {
     _debounce?.cancel();
     _acctSub?.cancel();
+    _favSub?.cancel();
+    AppNav.select.removeListener(_onSelectRequest);
     _scroll.dispose();
     super.dispose();
+  }
+
+  /// Another screen (Favorites, Home) asked to open a title here.
+  void _onSelectRequest() {
+    final r = AppNav.select.value;
+    if (r == null || r.kind != widget.kind) return;
+    setState(() {
+      _selected = r;
+      _showVideo = false;
+    });
+    AppNav.select.value = null;
   }
 
   Future<void> _reload() async {
@@ -329,6 +350,8 @@ class _PosterBrowserState extends State<PosterBrowser> {
               _selected = it;
               _showVideo = false;
             }),
+            isFav: _favKeys.contains(favKey(it)),
+            onFav: () => Services.favorites.toggle(it),
           );
         },
       );
@@ -391,7 +414,9 @@ class _PosterTile extends StatelessWidget {
   final bool active;
   final String accountName;
   final VoidCallback onTap;
-  const _PosterTile({required this.item, required this.active, required this.accountName, required this.onTap});
+  final bool isFav;
+  final VoidCallback onFav;
+  const _PosterTile({required this.item, required this.active, required this.accountName, required this.onTap, required this.isFav, required this.onFav});
 
   @override
   Widget build(BuildContext context) {
@@ -428,9 +453,23 @@ class _PosterTile extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Text(item.name,
-              maxLines: 2, overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: active ? BMColors.mango : BMColors.text)),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(item.name,
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: active ? BMColors.mango : BMColors.text)),
+              ),
+              InkWell(
+                onTap: onFav,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Icon(isFav ? Icons.star : Icons.star_border, size: 18, color: isFav ? BMColors.mango : BMColors.dim),
+                ),
+              ),
+            ],
+          ),
           if (accountName.isNotEmpty)
             Text(accountName,
                 maxLines: 1, overflow: TextOverflow.ellipsis,
