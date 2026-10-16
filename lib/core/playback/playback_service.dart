@@ -184,11 +184,13 @@ class PlaybackService {
     _lastUrl = url;
     current.value = item;
     await _configureFor(item, url);
+    // Begin right at your saved spot (no jump after loading, so no race).
+    await _setStart(item.kind == 'live' ? null : resumeAt);
     await player.open(Media(url, httpHeaders: {'User-Agent': bmUserAgent}), play: autoplay);
     if (item.kind == 'live') {
       history?.record(item);
     } else if (resumeAt != null) {
-      _seekWhenReady(item, resumeAt);
+      debugPrint('[playback] resuming at ${resumeAt.inSeconds}s');
     }
   }
 
@@ -325,6 +327,17 @@ class PlaybackService {
     try {
       await player.stop();
     } catch (_) {}
+  }
+
+  /// mpv's start position for the next file (null = from the top).
+  Future<void> _setStart(Duration? at) async {
+    final np = player.platform;
+    if (np is! NativePlayer) return;
+    try {
+      await np.setProperty('start', at == null ? 'none' : '${at.inSeconds}');
+    } catch (e) {
+      debugPrint('[playback] start position: $e');
+    }
   }
 
   Future<void> _saveProgress() async {
