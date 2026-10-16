@@ -49,6 +49,11 @@ class Session {
   }
 
   static Future<void> _restore() async {
+    final mode = Prefs.getStr('launch.mode') ?? 'resume'; // resume | paused | home
+    if (mode == 'home') {
+      AppNav.index.value = AppNav.home;
+      return;
+    }
     final screen = Prefs.getInt('session.screen');
     if (screen != null) AppNav.index.value = screen;
     final raw = Prefs.getStr('session.item');
@@ -73,7 +78,7 @@ class Session {
         language: s('language'),
       );
       if (await Services.accounts.get(item.accountId) == null) return;
-      await Services.playback.play(item, autoplay: item.kind == 'live');
+      await Services.playback.play(item, autoplay: mode == 'resume' && item.kind == 'live');
       debugPrint('[session] restored ${item.kind}: ${item.name}');
     } catch (e) {
       debugPrint('[session] could not restore: $e');

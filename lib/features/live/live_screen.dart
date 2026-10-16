@@ -53,6 +53,7 @@ class _LiveScreenState extends State<LiveScreen> {
     _favOnly = Prefs.getBool('live.favOnly');
     _guideW = Prefs.getDouble('live.guideW');
     Services.playback.current.addListener(_onCurrent);
+    Prefs.changes.addListener(_onPrefs);
     _favSub = Services.favorites.watchKeys().listen((k) {
       if (!mounted) return;
       setState(() => _favKeys = k);
@@ -76,6 +77,7 @@ class _LiveScreenState extends State<LiveScreen> {
     _acctSub?.cancel();
     _favSub?.cancel();
     Services.playback.current.removeListener(_onCurrent);
+    Prefs.changes.removeListener(_onPrefs);
     _scroll.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -115,6 +117,10 @@ class _LiveScreenState extends State<LiveScreen> {
       _loading = false;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _revealCurrent());
+  }
+
+  void _onPrefs() {
+    if (mounted) setState(() {});
   }
 
   void _onCurrent() => WidgetsBinding.instance.addPostFrameCallback((_) => _revealCurrent());
@@ -348,7 +354,7 @@ class _LiveScreenState extends State<LiveScreen> {
       );
     }
     // Number column fits the biggest number in the list, plus a little gap.
-    final numberWidth = _items.length.toString().length * 7.5 + 10;
+    final numberWidth = Prefs.getBool('live.hideNumbers') ? 0.0 : _items.length.toString().length * 7.5 + 10;
     return ListView.builder(
       controller: _scroll,
       itemCount: _items.length,
@@ -484,6 +490,7 @@ class _ChannelRow extends StatelessWidget {
         ),
         child: Row(
           children: [
+            if (numberWidth > 0)
             SizedBox(
               width: numberWidth,
               child: Text('${index + 1}', style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 12, color: BMColors.dim)),

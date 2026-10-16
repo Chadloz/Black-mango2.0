@@ -36,6 +36,12 @@ class ServerHealth {
     changes.value++;
   }
 
+  void clearAll() {
+    _downUntil.clear();
+    _fails.clear();
+    changes.value++;
+  }
+
   bool isDown(String host) => _downUntil[host]?.isAfter(DateTime.now()) ?? false;
   DateTime? downUntil(String host) => isDown(host) ? _downUntil[host] : null;
   DateTime? lastOk(String host) => _okAt[host];

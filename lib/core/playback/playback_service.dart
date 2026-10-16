@@ -272,6 +272,8 @@ class PlaybackService {
         // (Switching tracks mid-stream forces a re-read that stalls live streams.)
         await np.setProperty('subs-fallback', 'yes');
         await np.setProperty('slang', Prefs.getStr('subs.lang') ?? 'en,eng');
+        final alang = Prefs.getStr('audio.lang');
+        if (alang != null && alang.isNotEmpty) await np.setProperty('alang', alang);
         subsVisible.value = Prefs.getBool('subs.on');
         await np.setProperty('sub-visibility', subsVisible.value ? 'yes' : 'no');
       } catch (e) {
@@ -299,6 +301,18 @@ class PlaybackService {
       if (np is NativePlayer) await np.setProperty('slang', lang);
     }
     await setSubsVisible(true);
+  }
+
+  Future<void> setAudioLang(String codes) async {
+    Prefs.setStr('audio.lang', codes.isEmpty ? null : codes);
+    final np = player.platform;
+    if (np is NativePlayer) await np.setProperty('alang', codes);
+  }
+
+  Future<void> setSubLang(String codes) async {
+    Prefs.setStr('subs.lang', codes);
+    final np = player.platform;
+    if (np is NativePlayer) await np.setProperty('slang', codes);
   }
 
   Future<void> setVolume(double v) async {

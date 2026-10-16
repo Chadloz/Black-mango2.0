@@ -5,6 +5,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../app/theme.dart';
 import '../services.dart';
 import 'track_menu.dart';
+import '../playback/still_watching.dart';
 
 String _time(Duration d) {
   String two(int n) => n.toString().padLeft(2, '0');
@@ -128,6 +129,7 @@ class _BMControlsState extends State<BMControls> {
                   ),
                 ),
                 Positioned(left: 0, right: 0, bottom: 0, child: _fade(_bar(fs))),
+                const Positioned.fill(child: StillWatchingOverlay()),
               ],
             ),
           ),
