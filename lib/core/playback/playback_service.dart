@@ -318,15 +318,13 @@ class PlaybackService {
   Future<void> handOff() async {
     final cur = current.value;
     if (cur == null) return;
-    if (cur.kind == 'live') {
-      handedOff.value = true;
-      try {
-        await player.stop();
-      } catch (_) {}
-    } else {
-      await _saveProgress();
-      await player.pause();
-    }
+    // Hang up completely, movies included: a paused stream still holds the connection,
+    // and many providers refuse a second one. Your spot is saved, so Resume picks back up.
+    if (cur.kind != 'live') await _saveProgress();
+    handedOff.value = true;
+    try {
+      await player.stop();
+    } catch (_) {}
   }
 
   Future<void> _saveProgress() async {

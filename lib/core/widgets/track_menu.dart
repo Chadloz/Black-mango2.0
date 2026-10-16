@@ -139,10 +139,19 @@ class PlayerMoreMenu extends StatelessWidget {
     final live = cur.kind == 'live';
     // Step aside (panel stays open) so one-connection accounts don't refuse VLC.
     await Services.playback.handOff();
-    final args = ['-na', 'VLC', '--args', if (!live && pos > 5) '--start-time=$pos', url];
+    await Future.delayed(const Duration(milliseconds: 800)); // let the provider register the hang-up
+    final vlcArgs = [if (!live && pos > 5) '--start-time=$pos', url];
     try {
-      final r = await Process.run('/usr/bin/open', args);
-      if (r.exitCode != 0) throw Exception('${r.stderr}');
+      // Running VLC's own program passes the link (and start time) reliably.
+      // ("open --args" starts VLC, but the Mac version ignores the link.)
+      const bin = '/Applications/VLC.app/Contents/MacOS/VLC';
+      try {
+        await Process.start(bin, vlcArgs, mode: ProcessStartMode.detached);
+      } catch (e) {
+        debugPrint('[vlc] direct launch failed ($e), trying open -a');
+        final r = await Process.run('/usr/bin/open', ['-a', 'VLC', url]);
+        if (r.exitCode != 0) throw Exception('${r.stderr}');
+      }
       messenger.showSnackBar(const SnackBar(content: Text('Opened in VLC.')));
     } catch (e) {
       debugPrint('[vlc] launch failed: $e');
