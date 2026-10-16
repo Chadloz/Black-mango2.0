@@ -5,6 +5,7 @@ import 'core/services.dart';
 import 'core/prefs.dart';
 import 'core/session.dart';
 import 'core/app_log.dart';
+import 'core/hotkeys.dart';
 import 'core/playback/still_watching.dart';
 
 Future<void> main() async {
@@ -15,5 +16,6 @@ Future<void> main() async {
   Services.init();
   Session.start();
   StillWatching.start();
+  Hotkeys.start();
   runApp(const BlackMangoApp());
 }

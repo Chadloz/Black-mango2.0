@@ -4,6 +4,7 @@ import '../../app/theme.dart';
 import '../../core/prefs.dart';
 import '../../core/services.dart';
 import '../../core/app_log.dart';
+import '../../core/hotkeys.dart';
 import '../../core/playback/still_watching.dart';
 
 const _langOptions = [
@@ -180,9 +181,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
 
         _section('KEYBOARD SHORTCUTS'),
-        const Text('Click the video once, then:', style: TextStyle(color: BMColors.dim, fontSize: 13)),
-        const SizedBox(height: 6),
-        for (final s in _shortcuts) _shortcut(s.$1, s.$2),
+        const HotkeyEditor(),
 
         _section('DATA'),
         _row(

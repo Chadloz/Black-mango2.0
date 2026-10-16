@@ -18,6 +18,8 @@ String _time(Duration d) {
 class BMControls extends StatefulWidget {
   final VideoState state;
   final double rightInset; // room for a close button on the panel
+  /// The video on screen right now, for app-wide hotkeys (fullscreen, Esc).
+  static VideoState? activeState;
   const BMControls({super.key, required this.state, this.rightInset = 0});
 
   @override
@@ -49,6 +51,7 @@ class _BMControlsState extends State<BMControls> {
 
   @override
   void dispose() {
+    if (BMControls.activeState == widget.state) BMControls.activeState = null;
     _hide?.cancel();
     for (final s in _subs) {
       s.cancel();
@@ -89,6 +92,7 @@ class _BMControlsState extends State<BMControls> {
   @override
   Widget build(BuildContext context) {
     final fs = widget.state.isFullscreen();
+    BMControls.activeState = widget.state;
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.space): _toggle,

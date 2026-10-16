@@ -10,6 +10,8 @@ import '../../core/widgets/filter_menu.dart';
 import '../../core/widgets/track_menu.dart';
 import '../../core/widgets/player_controls.dart';
 import '../../core/epg/epg_service.dart';
+import '../../core/hotkeys.dart';
+import '../../app/nav.dart';
 import '../../core/favorites/favorites_service.dart';
 import '../../core/prefs.dart';
 
@@ -39,6 +41,8 @@ class _LiveScreenState extends State<LiveScreen> {
   StreamSubscription<List<Account>>? _acctSub;
   final _scroll = ScrollController();
   final _searchCtrl = TextEditingController(); // keeps search text across layout changes
+  int _sel = -1; // keyboard selection in the list
+  StreamSubscription<HK>? _hkSub;
   Set<String> _favKeys = {};
   bool _favOnly = false;
   StreamSubscription<Set<String>>? _favSub;
@@ -55,6 +59,7 @@ class _LiveScreenState extends State<LiveScreen> {
     _guideW = Prefs.getDouble('live.guideW');
     Services.playback.current.addListener(_onCurrent);
     Prefs.changes.addListener(_onPrefs);
+    _hkSub = Hotkeys.events.stream.listen(_onHotkey);
     _favSub = Services.favorites.watchKeys().listen((k) {
       if (!mounted) return;
       setState(() => _favKeys = k);
@@ -79,6 +84,7 @@ class _LiveScreenState extends State<LiveScreen> {
     _favSub?.cancel();
     Services.playback.current.removeListener(_onCurrent);
     Prefs.changes.removeListener(_onPrefs);
+    _hkSub?.cancel();
     _scroll.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -115,9 +121,61 @@ class _LiveScreenState extends State<LiveScreen> {
       _genres = genres;
       _genre = genre;
       _items = _favOnly ? items.where((x) => _favKeys.contains(favKey(x))).toList() : items;
+      _sel = -1;
       _loading = false;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _revealCurrent());
+  }
+
+  int _playingIndex() {
+    final cur = Services.playback.current.value;
+    if (cur == null) return -1;
+    var i = _items.indexWhere((x) => x.id == cur.id);
+    final origin = Services.playback.failoverOrigin;
+    if (i < 0 && origin != null) i = _items.indexWhere((x) => x.id == origin.id);
+    return i;
+  }
+
+  void _onHotkey(HK a) {
+    if (_items.isEmpty) return;
+    // Channel flipping works from anywhere (fullscreen too) while a live channel plays.
+    if (a == HK.channelNext || a == HK.channelPrev) {
+      final cur = Services.playback.current.value;
+      if (cur == null || cur.kind != 'live') return;
+      final i = _playingIndex();
+      if (i < 0) return;
+      final j = (i + (a == HK.channelNext ? 1 : -1)) % _items.length;
+      setState(() => _sel = j);
+      _play(_items[j]);
+      _revealIndex(j);
+      return;
+    }
+    if (AppNav.index.value != AppNav.live) return;
+    if (_sel < 0) _sel = _playingIndex();
+    switch (a) {
+      case HK.navDown:
+        setState(() => _sel = (_sel + 1).clamp(0, _items.length - 1));
+        _revealIndex(_sel);
+      case HK.navUp:
+        setState(() => _sel = (_sel - 1).clamp(0, _items.length - 1));
+        _revealIndex(_sel);
+      case HK.playSelected:
+        if (_sel >= 0 && _sel < _items.length) _play(_items[_sel]);
+      default:
+        break;
+    }
+  }
+
+  /// Keeps a row visible. Does nothing if it already is.
+  void _revealIndex(int i) {
+    if (i < 0 || !_scroll.hasClients) return;
+    const rowH = 60.0;
+    final pos = i * rowH;
+    final view = _scroll.position.viewportDimension;
+    final off = _scroll.offset;
+    if (pos >= off && pos + rowH <= off + view) return;
+    final target = (pos - view / 2 + rowH / 2).clamp(0.0, _scroll.position.maxScrollExtent).toDouble();
+    _scroll.jumpTo(target);
   }
 
   void _onPrefs() {
@@ -371,6 +429,7 @@ class _LiveScreenState extends State<LiveScreen> {
           numberWidth: numberWidth,
           isFav: _favKeys.contains(favKey(it)),
           onFav: () => Services.favorites.toggle(it),
+          selected: i == _sel,
         );
       },
     );
@@ -476,7 +535,8 @@ class _ChannelRow extends StatelessWidget {
   final double numberWidth;
   final bool isFav;
   final VoidCallback onFav;
-  const _ChannelRow({required this.index, required this.item, required this.accountName, required this.active, required this.onTap, required this.numberWidth, required this.isFav, required this.onFav});
+  final bool selected;
+  const _ChannelRow({required this.index, required this.item, required this.accountName, required this.active, required this.onTap, required this.numberWidth, required this.isFav, required this.onFav, this.selected = false});
 
   @override
   Widget build(BuildContext context) {
@@ -494,7 +554,7 @@ class _ChannelRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: active ? const Color(0x22FF8C00) : null,
+          color: active ? const Color(0x22FF8C00) : (selected ? const Color(0x18FFFFFF) : null),
           border: const Border(bottom: BorderSide(color: BMColors.border, width: 0.5)),
         ),
         child: Row(
