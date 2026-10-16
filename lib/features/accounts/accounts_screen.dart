@@ -4,6 +4,7 @@ import '../../core/services.dart';
 import '../../core/storage/database.dart';
 import 'add_account_dialog.dart';
 import 'free_channels_dialog.dart';
+import '../../core/prefs.dart';
 
 class AccountsScreen extends StatelessWidget {
   const AccountsScreen({super.key});
@@ -113,6 +114,8 @@ class _AccountCard extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     try {
       final msg = await Services.catalog.load(account);
+      final host = Uri.tryParse(account.server)?.host ?? '';
+      if (host.isNotEmpty) Services.health.clear(host);
       messenger.showSnackBar(SnackBar(content: Text('${account.name}: $msg')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('${account.name}: load failed: $e')));
@@ -180,6 +183,7 @@ class _AccountCard extends StatelessWidget {
               );
             },
           ),
+          _AccountStatus(account: account),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -208,6 +212,62 @@ class _AccountCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/// Working / Server down / Expires on, under each account.
+class _AccountStatus extends StatelessWidget {
+  final Account account;
+  const _AccountStatus({required this.account});
+
+  String _ago(DateTime t) {
+    final m = DateTime.now().difference(t).inMinutes;
+    if (m < 1) return 'just now';
+    return m < 60 ? '$m min ago' : '${m ~/ 60} hr ago';
+  }
+
+  Widget _dot(Color c, String t) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 8, height: 8, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+          const SizedBox(width: 6),
+          Text(t, style: TextStyle(fontSize: 12, color: c)),
+        ],
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final host = Uri.tryParse(account.server)?.host ?? '';
+    final exp = Prefs.getInt('acct.${account.id}.exp');
+    return ValueListenableBuilder<int>(
+      valueListenable: Services.health.changes,
+      builder: (context, _, _) {
+        final h = Services.health;
+        final parts = <Widget>[];
+        final until = h.downUntil(host);
+        final ok = h.lastOk(host);
+        if (until != null) {
+          final mins = until.difference(DateTime.now()).inMinutes + 1;
+          parts.add(_dot(Colors.redAccent, 'Server down · skipping for $mins min'));
+        } else if (ok != null) {
+          parts.add(_dot(const Color(0xFF4CAF50), 'Working · played fine ${_ago(ok)}'));
+        }
+        if (exp != null && exp > 0) {
+          final d = DateTime.fromMillisecondsSinceEpoch(exp * 1000);
+          final days = d.difference(DateTime.now()).inDays;
+          final label = '${_months[d.month - 1]} ${d.day}, ${d.year}';
+          final color = days < 0 ? Colors.redAccent : (days < 7 ? Colors.amber : BMColors.dim);
+          parts.add(Text(days < 0 ? 'Expired $label' : 'Expires $label', style: TextStyle(fontSize: 12, color: color)));
+        }
+        if (parts.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Wrap(spacing: 16, runSpacing: 4, children: parts),
+        );
+      },
     );
   }
 }

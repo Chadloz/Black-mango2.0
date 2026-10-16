@@ -32,6 +32,15 @@ class XtreamClient {
     return XtreamAuth(active, 'Status ${status.isEmpty ? 'unknown' : status}, $expText, $conns connection(s).');
   }
 
+  /// Account expiration (unix seconds), or null if the provider doesn't list one.
+  Future<int?> expiry() async {
+    try {
+      final j = await fetchJson(_api(), timeout: const Duration(seconds: 20));
+      if (j is Map && j['user_info'] is Map) return int.tryParse('${j['user_info']['exp_date'] ?? ''}');
+    } catch (_) {}
+    return null;
+  }
+
   /// category_id -> category name
   Future<Map<String, String>> categories(String action) async {
     final j = await fetchJson(_api({'action': action}));

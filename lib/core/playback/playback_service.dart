@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../history/history_service.dart';
 import '../catalog/catalog_service.dart';
+import '../prefs.dart';
+import 'server_health.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../storage/database.dart';
@@ -16,11 +18,19 @@ class PlaybackService {
   /// Set by Services at startup.
   HistoryService? history;
   CatalogService? catalog;
+  ServerHealth? health;
+  int _openFailsInRow = 0; // reconnects that failed to open at all
+  int _busyInRow = 0; // reconnects refused with 403 (account already in use)
   final Set<String> _triedAccounts = {};
+  final Set<String> _triedHosts = {}; // servers that already failed for this pick
+  final handedOff = ValueNotifier<bool>(false); // playing in VLC instead
+  final subsVisible = ValueNotifier<bool>(false);
+  double _lastVolume = 100;
   /// The channel you actually picked, when failover switched to a backup (for highlighting).
   Item? failoverOrigin;
 
   PlaybackService(this.accounts) {
+    _applyStartupPrefs();
     // Save movie/episode progress every 10 seconds while playing.
     Timer.periodic(const Duration(seconds: 10), (_) {
       final cur = current.value;
@@ -56,15 +66,24 @@ class PlaybackService {
     });
     // Once playback passes one second, the stream counts as started.
     player.stream.position.listen((p) {
-      if (p > const Duration(seconds: 1)) _started = true;
+      if (p > const Duration(seconds: 1) && !_started) {
+        _started = true;
+        _openFailsInRow = 0;
+        final h = Uri.tryParse(_lastUrl ?? '')?.host ?? '';
+        if (h.isNotEmpty) health?.ok(h);
+      }
     });
     // Clear the reconnect badge once video is flowing again.
     player.stream.buffering.listen((b) {
-      if (!b && player.state.playing && !_reconnectPending) reconnecting.value = null;
+      if (!b && player.state.playing && !_reconnectPending) {
+        reconnecting.value = null;
+        _openFailsInRow = 0;
+        _busyInRow = 0;
+      }
     });
   }
 
-  final Player player = Player(configuration: const PlayerConfiguration(logLevel: MPVLogLevel.warn));
+  final Player player = Player(configuration: const PlayerConfiguration(logLevel: MPVLogLevel.warn, libass: true));
   late final VideoController controller = VideoController(player);
 
   /// What's playing right now (null = nothing).
@@ -140,10 +159,21 @@ class PlaybackService {
   Future<void> play(Item item, {bool autoplay = true, bool isFailover = false}) async {
     if (!isFailover) {
       _triedAccounts.clear();
+      _triedHosts.clear();
       failoverOrigin = null;
     }
+    handedOff.value = false;
     _triedAccounts.add(item.accountId);
     final url = await urlFor(item);
+    final host = Uri.tryParse(url)?.host ?? '';
+    if (host.isNotEmpty) _triedHosts.add(host);
+    // Known-down server: go straight to a backup instead of waiting on it.
+    if (!isFailover && item.kind == 'live' && host.isNotEmpty && (health?.isDown(host) ?? false) && catalog != null) {
+      current.value = item;
+      reconnecting.value = 'Server down, finding a backup...';
+      _failoverOrGiveUp(item, 'This server is down right now. Try again later or pick another channel.');
+      return;
+    }
     await _saveProgress();
     final resumeAt = item.kind == 'live' ? null : await history?.resumePosition(item);
     _recentReconnects.clear();
@@ -197,6 +227,7 @@ class PlaybackService {
   Future<void> stop() async {
     await _saveProgress();
     failoverOrigin = null;
+    handedOff.value = false;
     current.value = null;
     reconnecting.value = null;
     _lastUrl = null;
@@ -211,7 +242,7 @@ class PlaybackService {
       return;
     }
     _reconnectPending = true;
-    final alts = await cat.failoverCandidates(item, _triedAccounts);
+    final alts = await cat.failoverCandidates(item, _triedAccounts, excludeHosts: {..._triedHosts, ...?health?.downHosts});
     _reconnectPending = false;
     if (current.value?.id != item.id) return; // you already picked something else
     if (alts.isEmpty) {
@@ -227,6 +258,74 @@ class PlaybackService {
       reconnecting.value = 'Trying ${alt.name} on $acctName...';
     } catch (_) {
       reconnecting.value = giveUpMsg;
+    }
+  }
+
+  Future<void> _applyStartupPrefs() async {
+    final np = player.platform;
+    if (np is NativePlayer) {
+      try {
+        await np.setProperty('volume-max', '150');
+        // Keep a subtitle track loaded but hidden, so turning subs on is instant.
+        // (Switching tracks mid-stream forces a re-read that stalls live streams.)
+        await np.setProperty('subs-fallback', 'yes');
+        await np.setProperty('slang', Prefs.getStr('subs.lang') ?? 'en,eng');
+        subsVisible.value = Prefs.getBool('subs.on');
+        await np.setProperty('sub-visibility', subsVisible.value ? 'yes' : 'no');
+      } catch (e) {
+        debugPrint('[playback] startup settings: $e');
+      }
+    }
+    await player.setVolume(Prefs.getDouble('player.volume') ?? 100);
+  }
+
+  /// Show or hide subtitles without switching tracks (no stall).
+  Future<void> setSubsVisible(bool on) async {
+    subsVisible.value = on;
+    Prefs.setBool('subs.on', on);
+    final np = player.platform;
+    if (np is NativePlayer) await np.setProperty('sub-visibility', on ? 'yes' : 'no');
+  }
+
+  /// Pick a subtitle language. Only switches tracks if it's a different one.
+  Future<void> chooseSubtitle(SubtitleTrack t) async {
+    if (player.state.track.subtitle.id != t.id) await player.setSubtitleTrack(t);
+    final lang = t.language;
+    if (lang != null && lang.isNotEmpty) {
+      Prefs.setStr('subs.lang', lang);
+      final np = player.platform;
+      if (np is NativePlayer) await np.setProperty('slang', lang);
+    }
+    await setSubsVisible(true);
+  }
+
+  Future<void> setVolume(double v) async {
+    await player.setVolume(v);
+    if (v > 0) Prefs.setDouble('player.volume', v);
+  }
+
+  Future<void> toggleMute() async {
+    final v = player.state.volume;
+    if (v > 0) {
+      _lastVolume = v;
+      await player.setVolume(0);
+    } else {
+      await player.setVolume(_lastVolume <= 0 ? 100 : _lastVolume);
+    }
+  }
+
+  /// Opening in VLC: movies pause; live hangs up (one-connection accounts) but the panel stays.
+  Future<void> handOff() async {
+    final cur = current.value;
+    if (cur == null) return;
+    if (cur.kind == 'live') {
+      handedOff.value = true;
+      try {
+        await player.stop();
+      } catch (_) {}
+    } else {
+      await _saveProgress();
+      await player.pause();
     }
   }
 
@@ -255,7 +354,15 @@ class PlaybackService {
 
   /// App-level backup reconnect for live streams, throttled like 1.x.
   void _onDropped(String why) {
-    if (_shuttingDown) return;
+    if (_shuttingDown || handedOff.value) return;
+    final was403 = _last403 != null && DateTime.now().difference(_last403!) < const Duration(seconds: 10);
+    if (was403) _busyInRow++;
+    // A 403 means the server is up but still holding our old connection: not a dead server.
+    if (why.contains('Failed to open') && !was403) {
+      final h = Uri.tryParse(_lastUrl ?? '')?.host ?? '';
+      if (h.isNotEmpty) health?.fail(h, _lastUrl ?? '');
+      _openFailsInRow++;
+    }
     final item = current.value;
     final url = _lastUrl;
     if (item == null || url == null || item.kind != 'live' || _reconnectPending) return;
@@ -264,7 +371,11 @@ class PlaybackService {
       // A 403 usually means our old connection is still open, so be patient before failing over.
       final just403 = _last403 != null && DateTime.now().difference(_last403!) < const Duration(seconds: 10);
       if (_startRetries >= (just403 ? 3 : 1)) {
-        _failoverOrGiveUp(item, "This channel isn't working right now. Try another one.");
+        _failoverOrGiveUp(
+            item,
+            just403
+                ? 'This account is already in use (one connection at a time). Close VLC or other devices using it, then try again.'
+                : "This channel isn't working right now. Try another one.");
         return;
       }
       _startRetries++;
@@ -281,6 +392,18 @@ class PlaybackService {
       });
       return;
     }
+    // Mid-show: if reopening keeps failing outright, the server is gone. Fail over now.
+    // Still refused after ~50s of patient retries: something else is using the account.
+    if (_busyInRow >= 6) {
+      _busyInRow = 0;
+      reconnecting.value = 'This account is already in use (one connection at a time). Close VLC or other devices using it, then try again.';
+      return;
+    }
+    if (_openFailsInRow >= 3) {
+      _openFailsInRow = 0;
+      _failoverOrGiveUp(item, 'Stream unstable. Pick it again or try another channel.');
+      return;
+    }
     final now = DateTime.now();
     _recentReconnects.removeWhere((t) => now.difference(t) > const Duration(minutes: 1));
     if (_recentReconnects.length >= _maxReconnects) {
@@ -293,7 +416,8 @@ class PlaybackService {
     debugPrint('[playback] live stream $why, reconnecting');
     // Back off: 0.8s, 1.6s, 3.2s, 6.4s, then 8s, so the provider can release the old connection.
     final backoffMs = (800 * (1 << (_recentReconnects.length - 1))).clamp(800, 8000);
-    Future.delayed(Duration(milliseconds: backoffMs), () async {
+    final waitMs = was403 ? 8000 : backoffMs; // give the provider time to release the old connection
+    Future.delayed(Duration(milliseconds: waitMs), () async {
       _reconnectPending = false;
       if (current.value?.id != item.id) return;
       await player.open(Media(url, httpHeaders: {'User-Agent': bmUserAgent}));

@@ -7,6 +7,8 @@ import '../../core/services.dart';
 import '../../core/storage/database.dart';
 import '../../core/widgets/account_picker.dart';
 import '../../core/widgets/filter_menu.dart';
+import '../../core/widgets/track_menu.dart';
+import '../../core/widgets/player_controls.dart';
 import '../../core/favorites/favorites_service.dart';
 import '../../core/prefs.dart';
 
@@ -35,6 +37,7 @@ class _LiveScreenState extends State<LiveScreen> {
   Timer? _debounce;
   StreamSubscription<List<Account>>? _acctSub;
   final _scroll = ScrollController();
+  final _searchCtrl = TextEditingController(); // keeps search text across layout changes
   Set<String> _favKeys = {};
   bool _favOnly = false;
   StreamSubscription<Set<String>>? _favSub;
@@ -74,6 +77,7 @@ class _LiveScreenState extends State<LiveScreen> {
     _favSub?.cancel();
     Services.playback.current.removeListener(_onCurrent);
     _scroll.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -203,9 +207,20 @@ class _LiveScreenState extends State<LiveScreen> {
 
   Widget _toolbar({required bool compact}) {
     final search = TextField(
+      controller: _searchCtrl,
       onChanged: _onSearch,
       decoration: InputDecoration(
         hintText: 'Search channels...',
+        suffixIcon: _searchCtrl.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Clear search',
+                icon: const Icon(Icons.close, size: 18),
+                onPressed: () {
+                  _searchCtrl.clear();
+                  _onSearch('');
+                },
+              ),
         prefixIcon: const Icon(Icons.search, color: BMColors.dim),
         isDense: true,
         filled: true,
@@ -377,7 +392,13 @@ class _PlayerArea extends StatelessWidget {
           Expanded(
             child: Stack(
               children: [
-                Video(controller: Services.playback.controller),
+                Video(
+                  controller: Services.playback.controller,
+                  // mpv draws subtitles itself (libass), including image-based ones.
+                  subtitleViewConfiguration: const SubtitleViewConfiguration(visible: false),
+                  controls: (state) => BMControls(state: state, rightInset: 0),
+                ),
+                const Positioned.fill(child: HandOffOverlay()),
                 Positioned(
                   top: 12,
                   left: 12,

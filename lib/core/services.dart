@@ -5,6 +5,7 @@ import 'catalog/catalog_service.dart';
 import 'playback/playback_service.dart';
 import 'favorites/favorites_service.dart';
 import 'history/history_service.dart';
+import 'playback/server_health.dart';
 
 /// App-wide services, created once at startup.
 class Services {
@@ -14,6 +15,7 @@ class Services {
   static late final PlaybackService playback;
   static late final FavoritesService favorites;
   static late final HistoryService history;
+  static late final ServerHealth health;
 
   static void init() {
     db = AppDatabase();
@@ -24,5 +26,7 @@ class Services {
     history = HistoryService(db);
     playback.history = history;
     playback.catalog = catalog;
+    health = ServerHealth();
+    playback.health = health;
   }
 }

@@ -10,6 +10,7 @@ import '../providers/m3u.dart';
 import 'classifier.dart';
 import 'details.dart';
 import 'name_match.dart';
+import '../prefs.dart';
 
 /// Builds database rows from an Xtream list. Top-level so it can run on a background worker.
 List<ItemsCompanion> buildXtreamRows(String accountId, String kind, List<Map> list, Map<String, String> cats,
@@ -147,7 +148,7 @@ class CatalogService {
   }
 
   /// The same live channel on other accounts, same country first, one per account.
-  Future<List<Item>> failoverCandidates(Item item, Set<String> exclude) async {
+  Future<List<Item>> failoverCandidates(Item item, Set<String> exclude, {Set<String> excludeHosts = const {}}) async {
     final target = normName(item.name);
     if (target.isEmpty) return [];
     final words = target.split(' ')..sort((a, b) => b.length.compareTo(a.length));
@@ -163,6 +164,12 @@ class CatalogService {
       matches.removeWhere((r) => r.country != item.country && r.language != item.language);
     }
     matches.sort((a, b) => (a.country == item.country ? 0 : 1).compareTo(b.country == item.country ? 0 : 1));
+    // Accounts on a server that already failed share its outage, so skip them.
+    if (excludeHosts.isNotEmpty) {
+      final accts = await db.select(db.accounts).get();
+      final hostOf = {for (final a in accts) a.id: Uri.tryParse(a.server)?.host ?? ''};
+      matches.removeWhere((m) => excludeHosts.contains(hostOf[m.accountId]));
+    }
     final seen = <String>{};
     return [for (final m in matches) if (seen.add(m.accountId)) m];
   }
@@ -201,6 +208,8 @@ class CatalogService {
       if (a.type == 'xtream') {
         final pass = await accounts.password(a.id) ?? '';
         final x = XtreamClient(a.server, a.username, pass);
+        final exp = await x.expiry();
+        if (exp != null && exp > 0) Prefs.setInt('acct.${a.id}.exp', exp);
 
         _set(id, 'Loading live channels...');
         final live = await x.list('get_live_streams');

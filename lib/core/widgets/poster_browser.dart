@@ -53,6 +53,7 @@ class _PosterBrowserState extends State<PosterBrowser> {
   Timer? _debounce;
   StreamSubscription<List<Account>>? _acctSub;
   final _scroll = ScrollController();
+  final _searchCtrl = TextEditingController(); // keeps search text across layout changes
   double? _guideW;
   Item? _selected; // title whose details are open
   Set<String> _favKeys = {};
@@ -92,6 +93,7 @@ class _PosterBrowserState extends State<PosterBrowser> {
     _favSub?.cancel();
     AppNav.select.removeListener(_onSelectRequest);
     _scroll.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -236,9 +238,20 @@ class _PosterBrowserState extends State<PosterBrowser> {
 
   Widget _browser({required bool compact, required Item? cur}) {
     final search = TextField(
+      controller: _searchCtrl,
       onChanged: _onSearch,
       decoration: InputDecoration(
         hintText: 'Search ${widget.noun}...',
+        suffixIcon: _searchCtrl.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Clear search',
+                icon: const Icon(Icons.close, size: 18),
+                onPressed: () {
+                  _searchCtrl.clear();
+                  _onSearch('');
+                },
+              ),
         prefixIcon: const Icon(Icons.search, color: BMColors.dim),
         isDense: true,
         filled: true,

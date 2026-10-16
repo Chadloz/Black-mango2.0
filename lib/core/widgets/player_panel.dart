@@ -3,6 +3,8 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../app/theme.dart';
 import '../services.dart';
 import '../storage/database.dart';
+import 'track_menu.dart';
+import 'player_controls.dart';
 
 class PlayerPanel extends StatelessWidget {
   final Item item;
@@ -18,7 +20,13 @@ class PlayerPanel extends StatelessWidget {
           Expanded(
             child: Stack(
               children: [
-                Video(controller: Services.playback.controller),
+                Video(
+                  controller: Services.playback.controller,
+                  // mpv draws subtitles itself (libass), including image-based ones.
+                  subtitleViewConfiguration: const SubtitleViewConfiguration(visible: false),
+                  controls: (state) => BMControls(state: state, rightInset: 48),
+                ),
+                const Positioned.fill(child: HandOffOverlay()),
                 Positioned(
                   top: 12,
                   left: 12,
