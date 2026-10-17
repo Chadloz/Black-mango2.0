@@ -37,6 +37,7 @@ class VolumeButton extends StatelessWidget {
         final v = (snap.data ?? 100).clamp(0.0, 150.0).toDouble();
         final icon = v == 0 ? Icons.volume_off : (v < 50 ? Icons.volume_down : Icons.volume_up);
         return MenuAnchor(
+      consumeOutsideTap: true,
           menuChildren: [
             SizedBox(
               width: 300,
@@ -164,6 +165,7 @@ class PlayerMoreMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MenuAnchor(
+      consumeOutsideTap: true,
       menuChildren: [
         MenuItemButton(
           leadingIcon: const Icon(Icons.picture_in_picture_alt, size: 18),
@@ -224,6 +226,7 @@ class TrackMenu extends StatelessWidget {
                               fontFamily: BMFonts.mono, fontSize: 11, letterSpacing: 1.5, color: BMColors.dim)),
                     );
                 return MenuAnchor(
+      consumeOutsideTap: true,
                   menuChildren: [
                     if (audio.length > 1) ...[
                       header('AUDIO'),

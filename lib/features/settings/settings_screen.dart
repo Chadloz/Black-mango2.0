@@ -180,6 +180,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           },
         )),
 
+        _section('LIVE TV AUDIO'),
+        _row(
+          'Dolby audio fix',
+          Switch(
+            value: !Prefs.getBool('relay.off'),
+            onChanged: (v) {
+              Prefs.setBool('relay.off', !v);
+              setState(() {});
+            },
+          ),
+          sub: 'Some channels label Dolby Digital Plus audio in a way the video engine skips, so they play silent. This relabels it on the fly. If live channels ever misbehave, turn it off. Applies to the next channel you open.',
+        ),
         _section('MINI PLAYER'),
         _row(
           'Float when I switch to another app',

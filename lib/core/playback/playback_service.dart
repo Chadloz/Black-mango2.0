@@ -1,3 +1,4 @@
+import 'ts_relay.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../history/history_service.dart';
@@ -76,7 +77,6 @@ class PlaybackService {
         _openFailsInRow = 0;
         reconnecting.value = null; // a working stream never keeps an old warning
         _logTracks();
-        Future.delayed(const Duration(seconds: 8), _logTracks); // catch late-arriving audio
         final h = Uri.tryParse(_lastUrl ?? '')?.host ?? '';
         if (h.isNotEmpty) health?.ok(h);
       }
@@ -183,7 +183,7 @@ class PlaybackService {
       await np.setProperty('demuxer-lavf-o', '');
       // Live .ts: look longer before deciding which tracks exist, so audio that is
       // announced late isn't missed (VLC is more patient here). Stops early when done.
-      final deep = item.kind == 'live' && isEndlessTs;
+      const deep = false; // tried for a silent channel; didn't help and slowed some starts
       await np.setProperty('demuxer-lavf-probesize', deep ? '20000000' : '5000000');
       await np.setProperty('demuxer-lavf-analyzeduration', deep ? '10' : '0');
     } else {
@@ -228,7 +228,7 @@ class PlaybackService {
     await _configureFor(item, url);
     // Begin right at your saved spot (no jump after loading, so no race).
     await _setStart(item.kind == 'live' ? null : resumeAt);
-    await player.open(Media(url, httpHeaders: {'User-Agent': bmUserAgent}), play: autoplay);
+    await player.open(Media(TsRelay.wrap(url), httpHeaders: {'User-Agent': bmUserAgent}), play: autoplay);
     if (item.kind == 'live') {
       history?.record(item);
     } else if (resumeAt != null) {
@@ -460,7 +460,7 @@ class PlaybackService {
       Future.delayed(Duration(milliseconds: recent403 ? 4000 * _startRetries : 2500), () async {
         _reconnectPending = false;
         if (current.value?.id != item.id) return;
-        await player.open(Media(url, httpHeaders: {'User-Agent': bmUserAgent}));
+        await player.open(Media(TsRelay.wrap(url), httpHeaders: {'User-Agent': bmUserAgent}));
         await player.play();
       });
       return;
@@ -493,7 +493,7 @@ class PlaybackService {
     Future.delayed(Duration(milliseconds: waitMs), () async {
       _reconnectPending = false;
       if (current.value?.id != item.id) return;
-      await player.open(Media(url, httpHeaders: {'User-Agent': bmUserAgent}));
+      await player.open(Media(TsRelay.wrap(url), httpHeaders: {'User-Agent': bmUserAgent}));
       // A reopened stream can come back paused; make sure it plays.
       await player.play();
     });

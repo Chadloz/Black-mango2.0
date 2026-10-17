@@ -313,7 +313,7 @@ class _HotkeyEditorState extends State<HotkeyEditor> {
           children: [
             const Expanded(
               child: Text(
-                'Click a key, then press the new one (Esc cancels). Shortcuts work anywhere except while typing in a text box. Double-clicking the video also toggles fullscreen.',
+                'Click a key, then press the new one (Esc cancels). Shortcuts work anywhere except while typing in a text box. Click the video to show the controls; double-click to play or pause.',
                 style: TextStyle(color: BMColors.dim, fontSize: 12),
               ),
             ),

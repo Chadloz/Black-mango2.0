@@ -118,9 +118,9 @@ class _BMControlsState extends State<BMControls> {
             behavior: HitTestBehavior.opaque,
             onTap: () {
               _focus.requestFocus();
-              _toggle();
+              _kick(); // one click: wake the controls
             },
-            onDoubleTap: () => widget.state.toggleFullscreen(),
+            onDoubleTap: _toggle, // two clicks: play / pause
             child: Stack(
               children: [
                 const Positioned.fill(child: ColoredBox(color: Colors.transparent)),
