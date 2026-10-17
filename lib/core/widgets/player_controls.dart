@@ -6,6 +6,7 @@ import '../../app/theme.dart';
 import '../services.dart';
 import 'track_menu.dart';
 import '../playback/still_watching.dart';
+import 'mini_player.dart';
 
 String _time(Duration d) {
   String two(int n) => n.toString().padLeft(2, '0');
@@ -168,6 +169,13 @@ class _BMControlsState extends State<BMControls> {
           ),
           const SizedBox(width: 4),
           Expanded(child: _live ? _liveBadge() : _seekBar()),
+          if (!fs)
+            IconButton(
+              tooltip: 'Float over other apps (P)',
+              color: Colors.white,
+              onPressed: () => PopOut.enter(),
+              icon: const Icon(Icons.picture_in_picture_alt),
+            ),
           IconButton(
             tooltip: fs ? 'Exit fullscreen (F)' : 'Fullscreen (F)',
             color: Colors.white,

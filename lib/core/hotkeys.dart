@@ -6,6 +6,7 @@ import '../app/theme.dart';
 import 'prefs.dart';
 import 'services.dart';
 import 'widgets/player_controls.dart';
+import 'widgets/mini_player.dart';
 
 /// Every action a key can trigger.
 enum HK {
@@ -23,6 +24,7 @@ enum HK {
   navDown,
   channelNext,
   channelPrev,
+  popOut,
 }
 
 const hkLabels = {
@@ -40,6 +42,7 @@ const hkLabels = {
   HK.navDown: 'Move selection down',
   HK.channelNext: 'Next channel',
   HK.channelPrev: 'Previous channel',
+  HK.popOut: 'Mini player (always on top)',
 };
 
 final _defaults = {
@@ -57,6 +60,7 @@ final _defaults = {
   HK.navDown: LogicalKeyboardKey.arrowDown,
   HK.channelNext: LogicalKeyboardKey.pageDown,
   HK.channelPrev: LogicalKeyboardKey.pageUp,
+  HK.popOut: LogicalKeyboardKey.keyP,
 };
 
 final _modifiers = {
@@ -166,6 +170,10 @@ class Hotkeys {
         pl.seek(t < Duration.zero ? Duration.zero : t);
         return true;
       case HK.closePlayer:
+        if (PopOut.active.value) {
+          PopOut.exit();
+          return true;
+        }
         final s = BMControls.activeState;
         if (s != null && s.isFullscreen()) {
           s.exitFullscreen();
@@ -176,6 +184,10 @@ class Hotkeys {
           return true;
         }
         return false;
+      case HK.popOut:
+        if (cur == null) return false;
+        PopOut.active.value ? PopOut.exit() : PopOut.enter();
+        return true;
       case HK.backToLast:
         AppNav.index.value = _prev;
         return true;

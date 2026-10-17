@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import '../../app/theme.dart';
 import '../services.dart';
+import 'mini_player.dart';
 
 const _langs = {
   'en': 'English', 'eng': 'English', 'es': 'Spanish', 'spa': 'Spanish', 'fr': 'French', 'fre': 'French',
@@ -164,6 +165,11 @@ class PlayerMoreMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return MenuAnchor(
       menuChildren: [
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.picture_in_picture_alt, size: 18),
+          onPressed: () => PopOut.enter(),
+          child: const Text('Mini player (always on top)'),
+        ),
         MenuItemButton(
           leadingIcon: const Icon(Icons.open_in_new, size: 18),
           onPressed: () => _vlc(context),

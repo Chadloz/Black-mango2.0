@@ -1,15 +1,31 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../prefs.dart';
 
-/// Passwords and private links go in the OS keychain:
-/// Mac Keychain, Windows Credential Manager, Linux Secret Service.
+/// Logins live in Black Mango's own settings storage, so macOS never asks for
+/// your Keychain password. Older logins are copied out of the Keychain once,
+/// the first time they're needed, and the Keychain isn't touched after that.
 class SecretStore {
-  // On macOS the default "data protection" keychain needs a paid Apple
-  // signing certificate. The regular login keychain works on unsigned builds.
-  static const _storage = FlutterSecureStorage(
+  static const _keychain = FlutterSecureStorage(
     mOptions: MacOsOptions(usesDataProtectionKeychain: false),
   );
+  static const _prefix = 'secret.';
 
-  Future<void> write(String key, String value) => _storage.write(key: key, value: value);
-  Future<String?> read(String key) => _storage.read(key: key);
-  Future<void> delete(String key) => _storage.delete(key: key);
+  Future<void> write(String key, String value) => Prefs.setStr('$_prefix$key', value);
+
+  Future<String?> read(String key) async {
+    final v = Prefs.getStr('$_prefix$key');
+    if (v != null) return v;
+    if (Prefs.getBool('${_prefix}moved.$key')) return null;
+    try {
+      final old = await _keychain.read(key: key);
+      await Prefs.setBool('${_prefix}moved.$key', true);
+      if (old != null) {
+        await Prefs.setStr('$_prefix$key', old);
+        return old;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> delete(String key) => Prefs.setStr('$_prefix$key', null);
 }

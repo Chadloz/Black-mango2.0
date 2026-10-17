@@ -137,6 +137,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           },
         )),
 
+        _section('MINI PLAYER'),
+        _row(
+          'Float when I switch to another app',
+          Switch(
+            value: !Prefs.getBool('mini.autoFloat.off'),
+            onChanged: (v) {
+              Prefs.setBool('mini.autoFloat.off', !v);
+              setState(() {});
+            },
+          ),
+          sub: 'While something plays, Black Mango shrinks into a small always-on-top window when you click over to another app.',
+        ),
         _section('STILL WATCHING?'),
         _row(
           "Ask if I'm still watching",

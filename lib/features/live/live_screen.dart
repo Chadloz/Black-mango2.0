@@ -11,6 +11,7 @@ import '../../core/widgets/track_menu.dart';
 import '../../core/widgets/player_controls.dart';
 import '../../core/epg/epg_service.dart';
 import '../../core/hotkeys.dart';
+import '../../core/widgets/mini_player.dart';
 import '../../app/nav.dart';
 import '../../core/favorites/favorites_service.dart';
 import '../../core/prefs.dart';
@@ -60,6 +61,9 @@ class _LiveScreenState extends State<LiveScreen> {
     Services.playback.current.addListener(_onCurrent);
     Prefs.changes.addListener(_onPrefs);
     _hkSub = Hotkeys.events.stream.listen(_onHotkey);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) MiniPlayerHost.install(context);
+    });
     _favSub = Services.favorites.watchKeys().listen((k) {
       if (!mounted) return;
       setState(() => _favKeys = k);
@@ -222,7 +226,9 @@ class _LiveScreenState extends State<LiveScreen> {
     return LayoutBuilder(
       builder: (context, box) => ValueListenableBuilder<Item?>(
         valueListenable: Services.playback.current,
-        builder: (context, cur, _) {
+        builder: (context, playing, _) {
+          // Live TV's player only shows live channels; movies and shows float in the mini player.
+          final cur = (playing != null && playing.kind == 'live') ? playing : null;
           final countLine = Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
             child: Align(
