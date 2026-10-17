@@ -5,6 +5,7 @@ import '../../core/prefs.dart';
 import '../../core/services.dart';
 import '../../core/app_log.dart';
 import '../../core/hotkeys.dart';
+import '../../core/backup.dart';
 import '../../core/playback/still_watching.dart';
 
 const _langOptions = [
@@ -71,6 +72,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     return ok ?? false;
+  }
+
+  Future<void> _export() async {
+    try {
+      final path = await Backup.export();
+      if (path != null) _snack('Backup saved: ${path.split('/').last}');
+    } catch (e) {
+      _snack('Export failed: $e');
+    }
+  }
+
+  Future<void> _import() async {
+    Map<String, dynamic>? picked;
+    try {
+      picked = await Backup.pick();
+    } catch (e) {
+      _snack('$e');
+      return;
+    }
+    if (picked == null || !mounted) return;
+    final data = picked;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import this backup?'),
+        content: Text('${Backup.describe(data)}.\n\nAccounts you already have are updated, and nothing else is removed. '
+            'Imported accounts reload their channels in the background.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Import')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final accts = await Backup.apply(data);
+      if (mounted) setState(() {});
+      _snack('Imported. Reloading ${accts.length} account(s) in the background...');
+      Backup.reloadAll(accts);
+    } catch (e) {
+      _snack('Import failed: $e');
+    }
   }
 
   void _snack(String t) {
@@ -259,6 +302,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           sub: 'Removes all accounts, channels, favorites, and history.',
         ),
 
+        _section('BACKUP'),
+        _row(
+          'Export backup',
+          OutlinedButton(onPressed: _export, child: const Text('Export…')),
+          sub: 'Accounts, logins, favorites, watch history, and settings in one file. It contains your passwords, so keep it private.',
+        ),
+        _row(
+          'Import backup',
+          OutlinedButton(onPressed: _import, child: const Text('Import…')),
+          sub: 'Adds everything from a backup file and reloads its accounts. Nothing you have now is deleted.',
+        ),
         _section('DEBUG LOG'),
         _row(
           'Diagnostic log',

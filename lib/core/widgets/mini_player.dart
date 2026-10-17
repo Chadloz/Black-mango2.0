@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
@@ -22,6 +23,27 @@ Future<void> dockToFullPlayer() async {
 
 /// Pops out automatically when you click over to another app while something plays.
 class _BlurWatcher with WindowListener {
+  Timer? _saveT;
+
+  /// Remembers the normal (not floating) window size and spot, so it reopens there.
+  void _remember() {
+    if (PopOut.active.value) return;
+    _saveT?.cancel();
+    _saveT = Timer(const Duration(milliseconds: 600), () async {
+      if (PopOut.active.value) return;
+      final b = await windowManager.getBounds();
+      if (b.width >= 640 && b.height >= 400) {
+        Prefs.setStr('window.bounds', '${b.left},${b.top},${b.width},${b.height}');
+      }
+    });
+  }
+
+  @override
+  void onWindowResized() => _remember();
+
+  @override
+  void onWindowMoved() => _remember();
+
   @override
   void onWindowBlur() {
     if (Prefs.getBool('mini.autoFloat.off')) return;
@@ -39,7 +61,29 @@ class PopOut {
   static Rect? _saved;
   static bool _hooked = false;
 
-  static void startAutoFloat() => windowManager.addListener(_BlurWatcher());
+  static void startAutoFloat() {
+    windowManager.addListener(_BlurWatcher());
+    _restoreWindow();
+  }
+
+  /// Opens at the last normal size. Never reopens floating-small.
+  static Future<void> _restoreWindow() async {
+    try {
+      await windowManager.setMinimumSize(const Size(960, 600));
+      final s = Prefs.getStr('window.bounds')?.split(',').map(double.tryParse).toList();
+      if (s != null && s.length == 4 && !s.contains(null) && s[2]! >= 640 && s[3]! >= 400) {
+        await windowManager.setBounds(Rect.fromLTWH(s[0]!, s[1]!, s[2]!, s[3]!));
+      } else {
+        final b = await windowManager.getBounds();
+        if (b.width < 640 || b.height < 400) {
+          await windowManager.setSize(const Size(1280, 800));
+          await windowManager.center();
+        }
+      }
+    } catch (e) {
+      debugPrint('[mini] window restore failed: $e');
+    }
+  }
 
   static Future<void> enter() async {
     if (active.value || Services.playback.current.value == null) return;
@@ -78,7 +122,7 @@ class PopOut {
       } catch (_) {}
       await windowManager.setAspectRatio(0);
       await windowManager.setTitleBarStyle(TitleBarStyle.normal);
-      await windowManager.setMinimumSize(const Size(640, 400));
+      await windowManager.setMinimumSize(const Size(960, 600));
       final s = _saved;
       if (s != null) await windowManager.setBounds(s);
       await windowManager.focus();
@@ -133,29 +177,63 @@ class _MiniLayerState extends State<_MiniLayer> {
     pl.seek(t < Duration.zero ? Duration.zero : t);
   }
 
+  bool _entering = false;
+  final _numCtrl = TextEditingController();
+
+  /// Opens a small Channel # box on the video itself (dialogs would hide behind the floating video).
   Future<void> _askNumber(BuildContext context) async {
     await windowManager.focus(); // so typing goes here, not to the app underneath
-    if (!context.mounted) return;
-    final ctrl = TextEditingController();
-    final n = await showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Go to channel'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(hintText: 'Channel number'),
-          onSubmitted: (v) => Navigator.pop(ctx, int.tryParse(v.trim())),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, int.tryParse(ctrl.text.trim())), child: const Text('Go')),
-        ],
-      ),
-    );
-    if (n != null) Hotkeys.gotoChannel.add(n);
+    _numCtrl.clear();
+    if (mounted) setState(() => _entering = true);
   }
+
+  void _submitNumber() {
+    final n = int.tryParse(_numCtrl.text.trim());
+    setState(() => _entering = false);
+    if (n != null && n > 0) Hotkeys.gotoChannel.add(n);
+  }
+
+  Widget _numberBox() => Center(
+        child: Material(
+          color: Colors.black87,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+            child: SizedBox(
+              width: 210,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _numCtrl,
+                      autofocus: true,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(color: Colors.white, fontSize: 18),
+                      decoration: const InputDecoration(
+                        hintText: 'Channel #',
+                        hintStyle: TextStyle(color: Colors.white54),
+                        border: InputBorder.none,
+                        isDense: true,
+                      ),
+                      onSubmitted: (_) => _submitNumber(),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Go',
+                    onPressed: _submitNumber,
+                    icon: const Icon(Icons.check, color: Colors.white, size: 20),
+                  ),
+                  IconButton(
+                    tooltip: 'Cancel',
+                    onPressed: () => setState(() => _entering = false),
+                    icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
 
   Widget _topBar(Item cur, {required bool popped}) {
     return Container(
@@ -222,6 +300,7 @@ class _MiniLayerState extends State<_MiniLayer> {
 
   List<Widget> _overlays(BuildContext context, Item cur, {required bool popped}) => [
         const Positioned.fill(child: IgnorePointer(child: ChannelNumberBadge())),
+        if (_entering) Positioned.fill(child: _numberBox()),
         if (_hover && !_dragging) ...[
           Positioned(top: 0, left: 0, right: 0, child: _topBar(cur, popped: popped)),
           Positioned(bottom: 0, left: 0, right: 0, child: _bottomBar(context, cur)),

@@ -161,7 +161,9 @@ class _BMControlsState extends State<BMControls> {
           colors: [Color(0xCC000000), Color(0x00000000)],
         ),
       ),
-      child: Row(
+      child: LayoutBuilder(builder: (context, box) {
+        final narrow = box.maxWidth < 360; // small player: drop the float button (P still works)
+        return Row(
         children: [
           IconButton(
             tooltip: _playing ? 'Pause (Space)' : 'Play (Space)',
@@ -171,7 +173,7 @@ class _BMControlsState extends State<BMControls> {
           ),
           const SizedBox(width: 4),
           Expanded(child: _live ? _liveBadge() : _seekBar()),
-          if (!fs)
+          if (!fs && !narrow)
             IconButton(
               tooltip: 'Float over other apps (P)',
               color: Colors.white,
@@ -185,7 +187,8 @@ class _BMControlsState extends State<BMControls> {
             icon: Icon(fs ? Icons.fullscreen_exit : Icons.fullscreen),
           ),
         ],
-      ),
+      );
+      }),
     );
   }
 
@@ -213,9 +216,11 @@ class _BMControlsState extends State<BMControls> {
         final maxMs = dur.inMilliseconds.toDouble();
         final ready = maxMs > 0;
         final val = ready ? (_drag ?? pos.inMilliseconds.toDouble()).clamp(0.0, maxMs).toDouble() : 0.0;
-        return Row(
+        return LayoutBuilder(builder: (context, box) {
+          final showTimes = box.maxWidth > 200; // tiny player: just the seek bar
+          return Row(
           children: [
-            Text(_time(Duration(milliseconds: val.round())), style: style),
+            if (showTimes) Text(_time(Duration(milliseconds: val.round())), style: style),
             Expanded(
               child: Slider(
                 value: val,
@@ -235,9 +240,10 @@ class _BMControlsState extends State<BMControls> {
                     : null,
               ),
             ),
-            Text(_time(dur), style: style),
+            if (showTimes) Text(_time(dur), style: style),
           ],
         );
+        });
       },
     );
   }

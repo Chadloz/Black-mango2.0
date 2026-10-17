@@ -346,7 +346,21 @@ class _LiveScreenState extends State<LiveScreen> {
         ),
       );
     }
-    return Padding(
+    return LayoutBuilder(builder: (context, box) {
+      // Slim guide: search on top, Filters and Accounts below, so nothing gets cut off.
+      if (box.maxWidth < 480) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          child: Column(
+            children: [
+              search,
+              const SizedBox(height: 8),
+              Row(children: [Expanded(child: filters), const SizedBox(width: 8), Expanded(child: accounts)]),
+            ],
+          ),
+        );
+      }
+      return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Row(
         children: [
@@ -358,6 +372,7 @@ class _LiveScreenState extends State<LiveScreen> {
         ],
       ),
     );
+    });
   }
 
   /// The line between guide and video. Drag it like a spreadsheet column.

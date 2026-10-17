@@ -17,6 +17,10 @@ class Prefs {
     return f;
   }
 
+  /// Every stored key and its raw value (for backups).
+  static Set<String> keys() => _p.keys;
+  static Object? raw(String k) => _p.get(k);
+
   static Set<String> getSet(String k) => (_p.getStringList(k) ?? const <String>[]).toSet();
   static Future<void> setSet(String k, Set<String> v) => _done(_p.setStringList(k, v.toList()));
   static String? getStr(String k) => _p.getString(k);
