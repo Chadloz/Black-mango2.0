@@ -75,6 +75,8 @@ class PlaybackService {
         _started = true;
         _openFailsInRow = 0;
         reconnecting.value = null; // a working stream never keeps an old warning
+        _logTracks();
+        Future.delayed(const Duration(seconds: 8), _logTracks); // catch late-arriving audio
         final h = Uri.tryParse(_lastUrl ?? '')?.host ?? '';
         if (h.isNotEmpty) health?.ok(h);
       }
@@ -105,6 +107,29 @@ class PlaybackService {
   bool _started = false; // true once the stream has actually played
   DateTime? _last403;
   int? _lastHttpCode; // last HTTP error status seen (404, 502...)
+
+  /// Logs the stream's tracks once it starts, e.g. to diagnose a silent channel.
+  Future<void> _logTracks() async {
+    try {
+      final np = player.platform as NativePlayer;
+      final n = int.tryParse(await np.getProperty('track-list/count')) ?? 0;
+      final parts = <String>[];
+      for (var i = 0; i < n && i < 12; i++) {
+        final type = await np.getProperty('track-list/$i/type');
+        if (type == 'sub') continue;
+        final codec = await np.getProperty('track-list/$i/codec');
+        final lang = await np.getProperty('track-list/$i/lang');
+        final sel = await np.getProperty('track-list/$i/selected');
+        final ch = type == 'audio' ? await np.getProperty('track-list/$i/demux-channel-count') : '';
+        parts.add('$type $codec${lang.isNotEmpty ? ' [$lang]' : ''}${ch.isNotEmpty ? ' ${ch}ch' : ''}${sel == 'yes' ? ' *' : ''}');
+      }
+      final vol = await np.getProperty('volume');
+      final mute = await np.getProperty('mute');
+      debugPrint('[tracks] ${parts.join(' | ')}  (volume $vol, mute $mute)');
+    } catch (e) {
+      debugPrint('[tracks] could not read: $e');
+    }
+  }
   DateTime? _lastHttpAt;
   bool _shuttingDown = false; // a server just refused us (often the one-connection limit)
   int _startRetries = 0;
@@ -156,6 +181,11 @@ class PlaybackService {
         ].join(','),
       );
       await np.setProperty('demuxer-lavf-o', '');
+      // Live .ts: look longer before deciding which tracks exist, so audio that is
+      // announced late isn't missed (VLC is more patient here). Stops early when done.
+      final deep = item.kind == 'live' && isEndlessTs;
+      await np.setProperty('demuxer-lavf-probesize', deep ? '20000000' : '5000000');
+      await np.setProperty('demuxer-lavf-analyzeduration', deep ? '10' : '0');
     } else {
       // HLS and redirect links: FFmpeg's reused connections fail on many CDNs,
       // so use a fresh connection per segment and retry segments instead.

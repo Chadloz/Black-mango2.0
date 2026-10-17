@@ -212,7 +212,7 @@ class Hotkeys {
         return true;
       case HK.closePlayer:
         if (PopOut.active.value) {
-          PopOut.exit();
+          PopOut.backToFull();
           return true;
         }
         final s = BMControls.activeState;
@@ -227,7 +227,7 @@ class Hotkeys {
         return false;
       case HK.popOut:
         if (cur == null) return false;
-        PopOut.active.value ? PopOut.exit() : PopOut.enter();
+        PopOut.active.value ? PopOut.backToFull() : PopOut.enter();
         return true;
       case HK.backToLast:
         AppNav.index.value = _prev;

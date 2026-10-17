@@ -112,6 +112,13 @@ class PopOut {
     }
   }
 
+  /// Floating window -> full app, on the screen that shows this video (not the mini card).
+  static Future<void> backToFull() async {
+    await exit();
+    final cur = Services.playback.current.value;
+    if (cur != null) AppNav.index.value = screenFor(cur);
+  }
+
   static Future<void> exit() async {
     if (!active.value) return;
     active.value = false;
@@ -249,12 +256,12 @@ class _MiniLayerState extends State<_MiniLayer> {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           if (popped)
-            _btn(Icons.close_fullscreen, 'Back to Black Mango (keeps playing)', () => PopOut.exit())
+            _btn(Icons.close_fullscreen, 'Back to the full player', () => PopOut.backToFull())
           else ...[
             _btn(Icons.open_in_full, 'Back to the full player', () => AppNav.index.value = screenFor(cur)),
             _btn(Icons.picture_in_picture_alt, 'Float over other apps', () => PopOut.enter()),
           ],
-          _btn(Icons.close, 'Close mini player (pauses)', () => dockToFullPlayer()),
+          _btn(Icons.close, 'Close (stops playback, stays on this screen)', () => Services.playback.stop()),
         ],
       ),
     );
@@ -332,7 +339,7 @@ class _MiniLayerState extends State<_MiniLayer> {
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onPanStart: (_) => windowManager.startDragging(),
-                    onDoubleTap: () => PopOut.exit(),
+                    onDoubleTap: () => PopOut.backToFull(),
                   ),
                   ..._overlays(context, cur, popped: true),
                 ],
