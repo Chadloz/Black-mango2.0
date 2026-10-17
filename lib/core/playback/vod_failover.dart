@@ -254,6 +254,17 @@ class VodFailover {
     return null;
   }
 
+  /// The show (series) an episode belongs to, on the same account.
+  static Future<Item?> showPageFor(Item ep) async {
+    final show = _episodeOf(ep)?.show;
+    if (show == null) return null;
+    final db = Services.db;
+    return (db.select(db.items)
+          ..where((t) => t.kind.equals('series') & t.accountId.equals(ep.accountId) & t.name.equals(show))
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
   /// Other accounts that have this movie or episode, best first.
   static Future<List<VodCandidate>> candidates(Item item, Set<String> exclude,
       {Set<String> excludeHosts = const {}}) async {

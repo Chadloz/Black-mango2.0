@@ -5,6 +5,7 @@ import 'package:media_kit/media_kit.dart';
 import '../../app/theme.dart';
 import '../services.dart';
 import 'mini_player.dart';
+import '../../app/nav.dart';
 import '../playback/vod_failover.dart';
 
 const _langs = {
@@ -174,6 +175,20 @@ class PlayerMoreMenu extends StatelessWidget {
             leadingIcon: const Icon(Icons.undo, size: 18),
             onPressed: () => Services.playback.undoVodSwitch(),
             child: Text('Back to ${VodFailover.lastSwitch.value!.originalAccount}'),
+          ),
+        if (Services.playback.current.value?.kind == 'episode')
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.video_library_outlined, size: 18),
+            onPressed: () async {
+              final cur = Services.playback.current.value;
+              if (cur == null) return;
+              final page = await VodFailover.showPageFor(cur);
+              if (page == null) return;
+              if (PopOut.active.value) await PopOut.backToFull();
+              AppNav.index.value = AppNav.shows;
+              AppNav.select.value = page;
+            },
+            child: const Text('Show page & episodes'),
           ),
         MenuItemButton(
           leadingIcon: const Icon(Icons.picture_in_picture_alt, size: 18),

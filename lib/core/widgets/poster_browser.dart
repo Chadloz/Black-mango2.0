@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../services.dart';
+import '../playback/vod_failover.dart';
 import '../storage/database.dart';
 import 'account_picker.dart';
 import 'filter_menu.dart';
@@ -72,6 +73,7 @@ class _PosterBrowserState extends State<PosterBrowser> {
     _genre = Prefs.getStr('$k.genre');
     _guideW = Prefs.getDouble('$k.guideW');
     AppNav.select.addListener(_onSelectRequest);
+    Services.playback.current.addListener(_onPlaying);
     _favSub = Services.favorites.watchKeys().listen((k) {
       if (mounted) setState(() => _favKeys = k);
     });
@@ -92,12 +94,34 @@ class _PosterBrowserState extends State<PosterBrowser> {
     _acctSub?.cancel();
     _favSub?.cancel();
     AppNav.select.removeListener(_onSelectRequest);
+    Services.playback.current.removeListener(_onPlaying);
     _scroll.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
 
   /// Another screen (Favorites, Home) asked to open a title here.
+  /// Something started playing here (Home, Continue Watching, restore, failover):
+  /// open its page behind the video, so closing the video lands on the show's episodes.
+  Future<void> _onPlaying() async {
+    final cur = Services.playback.current.value;
+    if (cur == null || !widget.playKinds.contains(cur.kind)) return;
+    Item? page;
+    if (cur.kind == 'episode') {
+      final sel = _selected;
+      page = await VodFailover.showPageFor(cur);
+      if (page == null || (sel != null && sel.id == page.id)) return;
+    } else {
+      if (_selected?.id == cur.id) return;
+      page = cur;
+    }
+    if (!mounted || Services.playback.current.value?.id != cur.id) return;
+    setState(() {
+      _selected = page;
+      _showVideo = true;
+    });
+  }
+
   void _onSelectRequest() {
     final r = AppNav.select.value;
     if (r == null || r.kind != widget.kind) return;
