@@ -242,7 +242,7 @@ class TrackMenu extends StatelessWidget {
                       for (var i = 0; i < audio.length; i++)
                         MenuItemButton(
                           leadingIcon: mark(cur.audio.id == audio[i].id),
-                          onPressed: () => p.setAudioTrack(audio[i]),
+                          onPressed: () => Services.playback.chooseAudio(audio[i]),
                           child: Text(_label(audio[i].title, audio[i].language, i)),
                         ),
                     ],
@@ -252,7 +252,7 @@ class TrackMenu extends StatelessWidget {
                     if (subs.isNotEmpty) ...[
                       MenuItemButton(
                         leadingIcon: mark(!subsOn),
-                        onPressed: () => Services.playback.setSubsVisible(false),
+                        onPressed: () => Services.playback.subsOff(),
                         child: const Text('Off'),
                       ),
                       for (var i = 0; i < subs.length; i++)

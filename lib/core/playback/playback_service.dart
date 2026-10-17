@@ -1,3 +1,4 @@
+import 'track_memory.dart';
 import 'vod_failover.dart';
 import 'ts_relay.dart';
 import 'dart:async';
@@ -244,6 +245,7 @@ class PlaybackService {
     await _configureFor(item, url);
     // Begin right at your saved spot (no jump after loading, so no race).
     await _setStart(item.kind == 'live' ? null : resumeAt);
+    await _applyTrackPrefs(item);
     await player.open(Media(TsRelay.wrap(url), httpHeaders: {'User-Agent': bmUserAgent}), play: autoplay);
     if (item.kind == 'live') {
       history?.record(item);
@@ -419,6 +421,40 @@ class PlaybackService {
     await play(s.original);
   }
 
+  /// Track defaults for this video: your choice for this show if you made one,
+  /// otherwise Settings, otherwise your Mac's language.
+  Future<void> _applyTrackPrefs(Item item) async {
+    final np = player.platform;
+    if (np is! NativePlayer) return;
+    final mem = TrackMemory.load(item);
+    final mac = TrackMemory.macLang();
+    String pick(Object? remembered, String? setting) {
+      if (remembered is String && remembered.isNotEmpty) return remembered;
+      if (setting != null && setting.isNotEmpty) return setting;
+      return mac;
+    }
+    await np.setProperty('alang', TrackMemory.expand(pick(mem['a'], Prefs.getStr('audio.lang'))));
+    await np.setProperty('slang', TrackMemory.expand(pick(mem['s'], Prefs.getStr('subs.lang'))));
+    final on = mem['on'] is bool ? mem['on'] as bool : Prefs.getBool('subs.on');
+    subsVisible.value = on;
+    await np.setProperty('sub-visibility', on ? 'yes' : 'no');
+    if (mem.isNotEmpty) debugPrint('[tracks] using your saved choice for this show: $mem');
+  }
+
+  /// Track menu: pick an audio track (remembered for this show).
+  Future<void> chooseAudio(AudioTrack t) async {
+    await player.setAudioTrack(t);
+    TrackMemory.save(current.value, audio: t.language ?? '');
+  }
+
+  /// Track menu: subtitles off (remembered for this show).
+  Future<void> subsOff() async {
+    subsVisible.value = false;
+    final np = player.platform;
+    if (np is NativePlayer) await np.setProperty('sub-visibility', 'no');
+    TrackMemory.save(current.value, subsOn: false);
+  }
+
   Future<void> _failoverOrGiveUp(Item item, String giveUpMsg) async {
     final cat = catalog;
     if (item.kind != 'live' || cat == null || _triedAccounts.length >= 4) {
@@ -476,13 +512,11 @@ class PlaybackService {
   /// Pick a subtitle language. Only switches tracks if it's a different one.
   Future<void> chooseSubtitle(SubtitleTrack t) async {
     if (player.state.track.subtitle.id != t.id) await player.setSubtitleTrack(t);
-    final lang = t.language;
-    if (lang != null && lang.isNotEmpty) {
-      Prefs.setStr('subs.lang', lang);
-      final np = player.platform;
-      if (np is NativePlayer) await np.setProperty('slang', lang);
-    }
-    await setSubsVisible(true);
+    subsVisible.value = true;
+    final np = player.platform;
+    if (np is NativePlayer) await np.setProperty('sub-visibility', 'yes');
+    // Remembered for this show; Settings stays your everyday default.
+    TrackMemory.save(current.value, sub: t.language ?? '', subsOn: true);
   }
 
   Future<void> setAudioLang(String codes) async {
