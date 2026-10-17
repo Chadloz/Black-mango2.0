@@ -59,11 +59,22 @@ class TsRelay {
       await res.close();
       return;
     }
-    debugPrint('[relay] stream ${Uri.parse(target).pathSegments.last} via relay');
+    final name = Uri.parse(target).pathSegments.last;
+    debugPrint('[relay] stream $name via relay');
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 12)
       ..autoUncompress = false;
-    var headersSent = false;
+    Socket? socket;
+    var closed = false;
+    // Closes both sides. Called the moment either the player or the provider hangs up,
+    // so the provider's connection slot is freed right away (one-connection accounts).
+    void shutdown() {
+      if (closed) return;
+      closed = true;
+      client.close(force: true);
+      socket?.destroy();
+    }
+
     try {
       final up = await client.getUrl(Uri.parse(target));
       for (final h in const ['user-agent', 'range', 'accept']) {
@@ -77,39 +88,58 @@ class TsRelay {
         final v = r.headers.value(h);
         if (v != null) res.headers.set(h, v);
       }
-      if (r.contentLength >= 0) res.contentLength = r.contentLength;
       if (r.statusCode >= 400) {
-        headersSent = true;
+        // Pass the provider's answer (403 busy, 404, 5xx...) straight to the player.
         await res.close();
+        shutdown();
         return;
       }
+      res.persistentConnection = false;
+      if (r.contentLength >= 0) {
+        res.contentLength = r.contentLength;
+      } else {
+        res.headers.chunkedTransferEncoding = false; // plain stream until either side closes
+      }
+      final s = await res.detachSocket(writeHeaders: true);
+      socket = s;
+      // The player hanging up (channel change, stop, close) shows up as its socket closing.
+      s.listen((_) {}, onDone: shutdown, onError: (_) => shutdown(), cancelOnError: true);
+
+      final started = DateTime.now();
+      var bytes = 0;
       final patcher = _TsPatcher(() => debugPrint('[relay] Dolby Digital Plus audio relabeled so it plays'));
-      headersSent = true;
-      await res.addStream(r.transform(StreamTransformer<List<int>, List<int>>.fromHandlers(
-        handleData: (d, sink) {
-          final o = patcher.process(d);
-          if (o.isNotEmpty) sink.add(o);
-        },
-        handleDone: (sink) {
-          final o = patcher.flush();
-          if (o.isNotEmpty) sink.add(o);
-          sink.close();
-        },
-      )));
-      await res.close();
+      try {
+        await s.addStream(r.transform(StreamTransformer<List<int>, List<int>>.fromHandlers(
+          handleData: (d, sink) {
+            bytes += d.length;
+            final o = patcher.process(d);
+            if (o.isNotEmpty) sink.add(o);
+          },
+          handleDone: (sink) {
+            final o = patcher.flush();
+            if (o.isNotEmpty) sink.add(o);
+            sink.close();
+          },
+        )));
+        await s.flush();
+        if (!closed) {
+          final secs = DateTime.now().difference(started).inSeconds;
+          debugPrint('[relay] provider ended $name after ${secs}s (${(bytes / 1e6).toStringAsFixed(1)} MB)');
+        }
+      } catch (_) {
+        // The player hung up mid-stream: normal on channel change.
+      }
     } catch (e) {
-      // Provider unreachable before anything was sent: tell the player it's a server problem.
-      if (!headersSent) {
+      // Provider unreachable before anything was sent: report it as a server problem.
+      if (!closed && socket == null) {
+        debugPrint('[relay] provider unreachable: $e');
         try {
           res.statusCode = HttpStatus.badGateway;
-          debugPrint('[relay] provider unreachable: $e');
+          await res.close();
         } catch (_) {}
       }
-      try {
-        await res.close();
-      } catch (_) {}
     } finally {
-      client.close(force: true); // free the provider's connection slot right away
+      shutdown();
     }
   }
 }

@@ -107,6 +107,7 @@ class Hotkeys {
     HardwareKeyboard.instance.addHandler(_handle);
     AppNav.index.addListener(() {
       if (AppNav.index.value != _cur) {
+        debugPrint('[nav] screen $_cur -> ${AppNav.index.value}');
         _prev = _cur;
         _cur = AppNav.index.value;
       }
@@ -131,6 +132,10 @@ class Hotkeys {
 
   static bool _handle(KeyEvent e) {
     if (e is! KeyDownEvent && e is! KeyRepeatEvent) return false;
+    if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.enter) {
+      final f = FocusManager.instance.primaryFocus;
+      debugPrint('[keys] Enter on screen ${AppNav.index.value}: typing=${_typing()} capturing=$capturing focus=${f?.context?.widget.runtimeType}');
+    }
     if (capturing || _typing()) return false;
     final hw = HardwareKeyboard.instance;
     if (hw.isMetaPressed || hw.isControlPressed || hw.isAltPressed) return false;

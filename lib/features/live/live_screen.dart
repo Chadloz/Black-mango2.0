@@ -167,6 +167,7 @@ class _LiveScreenState extends State<LiveScreen> {
         setState(() => _sel = (_sel - 1).clamp(0, _items.length - 1));
         _revealIndex(_sel);
       case HK.playSelected:
+        debugPrint(_sel >= 0 && _sel < _items.length ? '[keys] playing selected #${_sel + 1}' : '[keys] Enter: nothing selected');
         if (_sel >= 0 && _sel < _items.length) _play(_items[_sel]);
       default:
         break;
