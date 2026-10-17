@@ -44,6 +44,7 @@ class _LiveScreenState extends State<LiveScreen> {
   final _searchCtrl = TextEditingController(); // keeps search text across layout changes
   int _sel = -1; // keyboard selection in the list
   StreamSubscription<HK>? _hkSub;
+  StreamSubscription<int>? _gotoSub;
   Set<String> _favKeys = {};
   bool _favOnly = false;
   StreamSubscription<Set<String>>? _favSub;
@@ -61,6 +62,7 @@ class _LiveScreenState extends State<LiveScreen> {
     Services.playback.current.addListener(_onCurrent);
     Prefs.changes.addListener(_onPrefs);
     _hkSub = Hotkeys.events.stream.listen(_onHotkey);
+    _gotoSub = Hotkeys.gotoChannel.stream.listen(_goto);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) MiniPlayerHost.install(context);
     });
@@ -89,6 +91,7 @@ class _LiveScreenState extends State<LiveScreen> {
     Services.playback.current.removeListener(_onCurrent);
     Prefs.changes.removeListener(_onPrefs);
     _hkSub?.cancel();
+    _gotoSub?.cancel();
     _scroll.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -168,6 +171,17 @@ class _LiveScreenState extends State<LiveScreen> {
       default:
         break;
     }
+  }
+
+  /// Tune to a channel by its number in the list (as shown, within current filters).
+  void _goto(int n) {
+    if (n < 1 || n > _items.length) {
+      debugPrint('[live] no channel $n in this list');
+      return;
+    }
+    setState(() => _sel = n - 1);
+    _play(_items[n - 1]);
+    _revealIndex(n - 1);
   }
 
   /// Keeps a row visible. Does nothing if it already is.

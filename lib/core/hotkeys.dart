@@ -95,6 +95,11 @@ String keyName(LogicalKeyboardKey k) {
 class Hotkeys {
   static final events = StreamController<HK>.broadcast();
   static bool capturing = false; // Settings is waiting for a new key
+  /// Channel numbers typed like a TV remote (fires 1.2s after the last digit).
+  static final gotoChannel = StreamController<int>.broadcast();
+  static final typedNumber = ValueNotifier<String?>(null);
+  static String _typed = '';
+  static Timer? _typeTimer;
   static int _prev = AppNav.home;
   static int _cur = AppNav.index.value;
 
@@ -135,7 +140,43 @@ class Hotkeys {
         return _run(a);
       }
     }
+    // Digits while a live channel plays: type a channel number like a TV remote.
+    final d = _digitOf(e.logicalKey);
+    if (d != null && e is KeyDownEvent && Services.playback.current.value?.kind == 'live') {
+      _typeDigit(d);
+      return true;
+    }
     return false;
+  }
+
+  static int? _digitOf(LogicalKeyboardKey k) {
+    const top = [
+      LogicalKeyboardKey.digit0, LogicalKeyboardKey.digit1, LogicalKeyboardKey.digit2, LogicalKeyboardKey.digit3,
+      LogicalKeyboardKey.digit4, LogicalKeyboardKey.digit5, LogicalKeyboardKey.digit6, LogicalKeyboardKey.digit7,
+      LogicalKeyboardKey.digit8, LogicalKeyboardKey.digit9,
+    ];
+    const pad = [
+      LogicalKeyboardKey.numpad0, LogicalKeyboardKey.numpad1, LogicalKeyboardKey.numpad2, LogicalKeyboardKey.numpad3,
+      LogicalKeyboardKey.numpad4, LogicalKeyboardKey.numpad5, LogicalKeyboardKey.numpad6, LogicalKeyboardKey.numpad7,
+      LogicalKeyboardKey.numpad8, LogicalKeyboardKey.numpad9,
+    ];
+    var i = top.indexOf(k);
+    if (i >= 0) return i;
+    i = pad.indexOf(k);
+    return i >= 0 ? i : null;
+  }
+
+  static void _typeDigit(int d) {
+    if (_typed.length >= 5) _typed = '';
+    _typed += '$d';
+    typedNumber.value = _typed;
+    _typeTimer?.cancel();
+    _typeTimer = Timer(const Duration(milliseconds: 1200), () {
+      final n = int.tryParse(_typed);
+      _typed = '';
+      typedNumber.value = null;
+      if (n != null && n > 0) gotoChannel.add(n);
+    });
   }
 
   static bool _run(HK a) {
@@ -195,6 +236,31 @@ class Hotkeys {
         events.add(a); // list navigation, Enter, channel flipping: handled by screens
         return true;
     }
+  }
+}
+
+/// Big "Ch 12" shown on the video while a channel number is being typed.
+class ChannelNumberBadge extends StatelessWidget {
+  const ChannelNumberBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<String?>(
+      valueListenable: Hotkeys.typedNumber,
+      builder: (context, v, _) {
+        if (v == null) return const SizedBox.shrink();
+        return Align(
+          alignment: Alignment.topCenter,
+          child: Container(
+            margin: const EdgeInsets.only(top: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(10)),
+            child: Text('Ch $v',
+                style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 28, fontWeight: FontWeight.w700, color: BMColors.mango)),
+          ),
+        );
+      },
+    );
   }
 }
 

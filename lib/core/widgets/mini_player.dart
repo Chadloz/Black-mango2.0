@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../app/nav.dart';
+import '../hotkeys.dart';
 import '../prefs.dart';
 import '../services.dart';
 import '../storage/database.dart';
 import 'player_controls.dart';
+import 'track_menu.dart';
 
 /// Which screen shows the full player for this kind of item.
 int screenFor(Item i) => i.kind == 'live' ? AppNav.live : (i.kind == 'movie' ? AppNav.movies : AppNav.shows);
@@ -43,7 +45,6 @@ class PopOut {
     if (active.value || Services.playback.current.value == null) return;
     if (!_hooked) {
       _hooked = true;
-      // Playback stopped while popped out: bring the full window back.
       Services.playback.current.addListener(() {
         if (active.value && Services.playback.current.value == null) exit();
       });
@@ -126,39 +127,106 @@ class _MiniLayerState extends State<_MiniLayer> {
         icon: Icon(icon, color: Colors.white, size: 20),
       );
 
-  Widget _controls(Item cur, {required bool popped}) {
+  void _seek(int secs) {
     final pl = Services.playback.player;
-    return StreamBuilder<bool>(
-      stream: pl.stream.playing,
-      initialData: pl.state.playing,
-      builder: (context, snap) {
-        final playing = snap.data ?? false;
-        return Container(
-          padding: const EdgeInsets.all(2),
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xAA000000), Color(0x00000000)],
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              _btn(playing ? Icons.pause : Icons.play_arrow, playing ? 'Pause' : 'Play', () => pl.playOrPause()),
-              if (popped)
-                _btn(Icons.close_fullscreen, 'Back to Black Mango (keeps playing)', () => PopOut.exit())
-              else ...[
-                _btn(Icons.open_in_full, 'Back to the full player', () => AppNav.index.value = screenFor(cur)),
-                _btn(Icons.picture_in_picture_alt, 'Float over other apps', () => PopOut.enter()),
-              ],
-              _btn(Icons.close, 'Close mini player (pauses)', () => dockToFullPlayer()),
-            ],
-          ),
-        );
-      },
+    final t = pl.state.position + Duration(seconds: secs);
+    pl.seek(t < Duration.zero ? Duration.zero : t);
+  }
+
+  Future<void> _askNumber(BuildContext context) async {
+    await windowManager.focus(); // so typing goes here, not to the app underneath
+    if (!context.mounted) return;
+    final ctrl = TextEditingController();
+    final n = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Go to channel'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(hintText: 'Channel number'),
+          onSubmitted: (v) => Navigator.pop(ctx, int.tryParse(v.trim())),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, int.tryParse(ctrl.text.trim())), child: const Text('Go')),
+        ],
+      ),
+    );
+    if (n != null) Hotkeys.gotoChannel.add(n);
+  }
+
+  Widget _topBar(Item cur, {required bool popped}) {
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xAA000000), Color(0x00000000)],
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (popped)
+            _btn(Icons.close_fullscreen, 'Back to Black Mango (keeps playing)', () => PopOut.exit())
+          else ...[
+            _btn(Icons.open_in_full, 'Back to the full player', () => AppNav.index.value = screenFor(cur)),
+            _btn(Icons.picture_in_picture_alt, 'Float over other apps', () => PopOut.enter()),
+          ],
+          _btn(Icons.close, 'Close mini player (pauses)', () => dockToFullPlayer()),
+        ],
+      ),
     );
   }
+
+  Widget _bottomBar(BuildContext context, Item cur) {
+    final pl = Services.playback.player;
+    final live = cur.kind == 'live';
+    return Container(
+      padding: const EdgeInsets.fromLTRB(2, 12, 6, 2),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [Color(0xCC000000), Color(0x00000000)],
+        ),
+      ),
+      child: Row(
+        children: [
+          if (live)
+            _btn(Icons.skip_previous, 'Previous channel (Page Up)', () => Hotkeys.events.add(HK.channelPrev))
+          else
+            _btn(Icons.replay_10, 'Back 10 seconds', () => _seek(-10)),
+          StreamBuilder<bool>(
+            stream: pl.stream.playing,
+            initialData: pl.state.playing,
+            builder: (context, snap) {
+              final playing = snap.data ?? false;
+              return _btn(playing ? Icons.pause : Icons.play_arrow, playing ? 'Pause' : 'Play', () => pl.playOrPause());
+            },
+          ),
+          if (live)
+            _btn(Icons.skip_next, 'Next channel (Page Down)', () => Hotkeys.events.add(HK.channelNext))
+          else
+            _btn(Icons.forward_10, 'Forward 10 seconds', () => _seek(10)),
+          const Spacer(),
+          if (live) _btn(Icons.dialpad, 'Go to channel number (or just type the digits)', () => _askNumber(context)),
+          const VolumeButton(),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _overlays(BuildContext context, Item cur, {required bool popped}) => [
+        const Positioned.fill(child: IgnorePointer(child: ChannelNumberBadge())),
+        if (_hover && !_dragging) ...[
+          Positioned(top: 0, left: 0, right: 0, child: _topBar(cur, popped: popped)),
+          Positioned(bottom: 0, left: 0, right: 0, child: _bottomBar(context, cur)),
+        ],
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -170,7 +238,10 @@ class _MiniLayerState extends State<_MiniLayer> {
 
         // Popped out: the whole (small, always-on-top) window is the video.
         if (PopOut.active.value) {
-          return Material(
+          return Listener(
+            // A click makes Black Mango the active app, so typed channel numbers reach it.
+            onPointerDown: (_) => windowManager.focus(),
+            child: Material(
             color: Colors.black,
             child: MouseRegion(
               onEnter: (_) => setState(() => _hover = true),
@@ -184,11 +255,11 @@ class _MiniLayerState extends State<_MiniLayer> {
                     onPanStart: (_) => windowManager.startDragging(),
                     onDoubleTap: () => PopOut.exit(),
                   ),
-                  if (_hover) Positioned(top: 0, left: 0, right: 0, child: _controls(cur, popped: true)),
+                  ..._overlays(context, cur, popped: true),
                 ],
               ),
             ),
-          );
+          ));
         }
 
         // On the screen that already shows this video: no mini card needed.
@@ -242,8 +313,7 @@ class _MiniLayerState extends State<_MiniLayer> {
                           fit: StackFit.expand,
                           children: [
                             _video(),
-                            if (_hover && !_dragging)
-                              Positioned(top: 0, left: 0, right: 0, child: _controls(cur, popped: false)),
+                            ..._overlays(context, cur, popped: false),
                           ],
                         ),
                       ),

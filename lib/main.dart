@@ -6,6 +6,7 @@ import 'core/prefs.dart';
 import 'core/session.dart';
 import 'core/app_log.dart';
 import 'core/hotkeys.dart';
+import 'core/log_quiet.dart';
 import 'core/widgets/mini_player.dart';
 import 'package:window_manager/window_manager.dart';
 import 'core/playback/still_watching.dart';
@@ -20,6 +21,7 @@ Future<void> main() async {
   Session.start();
   StillWatching.start();
   Hotkeys.start();
+  LogQuiet.start();
   PopOut.startAutoFloat();
   runApp(const BlackMangoApp());
 }
