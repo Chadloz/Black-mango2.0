@@ -8,6 +8,7 @@ import 'track_menu.dart';
 import '../playback/still_watching.dart';
 import 'mini_player.dart';
 import '../hotkeys.dart';
+import '../playback/vod_failover.dart';
 
 String _time(Duration d) {
   String two(int n) => n.toString().padLeft(2, '0');
@@ -136,6 +137,7 @@ class _BMControlsState extends State<BMControls> {
                 ),
                 Positioned(left: 0, right: 0, bottom: 0, child: _fade(_bar(fs))),
                 const Positioned.fill(child: IgnorePointer(child: ChannelNumberBadge())),
+                const Positioned(left: 12, top: 12, child: VodSwitchBanner()),
                 const Positioned.fill(child: StillWatchingOverlay()),
               ],
             ),

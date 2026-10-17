@@ -5,6 +5,7 @@ import 'package:media_kit/media_kit.dart';
 import '../../app/theme.dart';
 import '../services.dart';
 import 'mini_player.dart';
+import '../playback/vod_failover.dart';
 
 const _langs = {
   'en': 'English', 'eng': 'English', 'es': 'Spanish', 'spa': 'Spanish', 'fr': 'French', 'fre': 'French',
@@ -167,6 +168,13 @@ class PlayerMoreMenu extends StatelessWidget {
     return MenuAnchor(
       consumeOutsideTap: true,
       menuChildren: [
+        if (VodFailover.lastSwitch.value != null &&
+            Services.playback.current.value?.id == VodFailover.lastSwitch.value!.now.id)
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.undo, size: 18),
+            onPressed: () => Services.playback.undoVodSwitch(),
+            child: Text('Back to ${VodFailover.lastSwitch.value!.originalAccount}'),
+          ),
         MenuItemButton(
           leadingIcon: const Icon(Icons.picture_in_picture_alt, size: 18),
           onPressed: () => PopOut.enter(),
@@ -207,7 +215,6 @@ class TrackMenu extends StatelessWidget {
         final tracks = snap.data ?? p.state.tracks;
         final audio = tracks.audio.where((t) => t.id != 'auto' && t.id != 'no').toList();
         final subs = tracks.subtitle.where((t) => t.id != 'auto' && t.id != 'no').toList();
-        if (audio.length <= 1 && subs.isEmpty) return const SizedBox.shrink();
         return StreamBuilder<Track>(
           stream: p.stream.track,
           initialData: p.state.track,
@@ -228,8 +235,10 @@ class TrackMenu extends StatelessWidget {
                 return MenuAnchor(
       consumeOutsideTap: true,
                   menuChildren: [
-                    if (audio.length > 1) ...[
+                    ...[
                       header('AUDIO'),
+                      if (audio.isEmpty)
+                        const MenuItemButton(onPressed: null, child: Text('No audio track found')),
                       for (var i = 0; i < audio.length; i++)
                         MenuItemButton(
                           leadingIcon: mark(cur.audio.id == audio[i].id),
@@ -237,8 +246,10 @@ class TrackMenu extends StatelessWidget {
                           child: Text(_label(audio[i].title, audio[i].language, i)),
                         ),
                     ],
+                    header('SUBTITLES'),
+                    if (subs.isEmpty)
+                      const MenuItemButton(onPressed: null, child: Text('None in this video')),
                     if (subs.isNotEmpty) ...[
-                      header('SUBTITLES'),
                       MenuItemButton(
                         leadingIcon: mark(!subsOn),
                         onPressed: () => Services.playback.setSubsVisible(false),

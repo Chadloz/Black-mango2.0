@@ -1,3 +1,4 @@
+import 'vod_failover.dart';
 import 'ts_relay.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -77,6 +78,8 @@ class PlaybackService {
         _openFailsInRow = 0;
         reconnecting.value = null; // a working stream never keeps an old warning
         _logTracks();
+        _vodRetries = 0;
+        _afterVodStart();
         final h = Uri.tryParse(_lastUrl ?? '')?.host ?? '';
         if (h.isNotEmpty) health?.ok(h);
       }
@@ -196,6 +199,19 @@ class PlaybackService {
 
   Future<void> play(Item item, {bool autoplay = true, bool isFailover = false}) async {
     if (!isFailover) {
+      VodFailover.lastSwitch.value = null;
+      _vodRetries = 0;
+      if (VodFailover.undoing) {
+        VodFailover.undoing = false;
+      } else {
+        VodFailover.undone.clear();
+        if (item.kind == 'movie' || item.kind == 'episode') {
+          final pref = await VodFailover.preferred(item);
+          if (pref != null) item = pref;
+        }
+      }
+    }
+    if (!isFailover) {
       _triedAccounts.clear();
       _triedHosts.clear();
       failoverOrigin = null;
@@ -279,6 +295,130 @@ class PlaybackService {
   }
 
   /// Tries the same channel on another account before showing an error.
+  int _vodRetries = 0;
+
+  /// A movie or episode hit a fatal error: one quiet retry at the same spot, then other accounts.
+  void _vodError(Item item, String url, String why) {
+    if (_vodRetries < 1) {
+      _vodRetries++;
+      _reconnectPending = true;
+      final pos = player.state.position;
+      reconnecting.value = 'Retrying...';
+      debugPrint('[playback] ${item.kind} failed ($why), one retry');
+      Future.delayed(const Duration(milliseconds: 2500), () async {
+        _reconnectPending = false;
+        if (current.value?.id != item.id) return;
+        if (pos.inSeconds >= 5) {
+          await (player.platform as NativePlayer).setProperty('start', '${pos.inSeconds}');
+        }
+        await player.open(Media(TsRelay.wrap(url), httpHeaders: {'User-Agent': bmUserAgent}));
+        await player.play();
+      });
+      return;
+    }
+    _vodRetries = 0;
+    _vodFailover(item, "This ${item.kind == 'movie' ? 'movie' : 'episode'} won't play on any of your accounts right now.");
+  }
+
+  /// Same movie or episode on another account, at the same spot.
+  Future<void> _vodFailover(Item item, String giveUpMsg, {bool countFailure = true}) async {
+    if (VodFailover.undone.contains(item.id)) {
+      // You chose this account with Undo, so don't switch on your behalf.
+      final name = (await accounts.get(item.accountId))?.name ?? 'this account';
+      reconnecting.value = "This won't play on $name right now. Pick it again to let Black Mango switch accounts.";
+      return;
+    }
+    if (_triedAccounts.length >= 4) {
+      reconnecting.value = giveUpMsg;
+      return;
+    }
+    final pos = player.state.position;
+    final dur = player.state.duration;
+    if (countFailure) VodFailover.recordFailure(item.accountId);
+    _reconnectPending = true;
+    reconnecting.value = 'Looking for it on your other accounts...';
+    final alts = await VodFailover.candidates(item, _triedAccounts,
+        excludeHosts: {..._triedHosts, ...?health?.downHosts});
+    _reconnectPending = false;
+    if (current.value?.id != item.id) return; // you already picked something else
+    if (alts.isEmpty) {
+      debugPrint('[playback] ${item.kind} failover: no match for ${item.name}');
+      reconnecting.value = giveUpMsg;
+      return;
+    }
+    final alt = alts.first;
+    final prev = VodFailover.lastSwitch.value;
+    final chained = prev != null && prev.now.id == item.id;
+    final s = VodSwitch(
+      original: chained ? prev.original : item,
+      now: alt.item,
+      originalAccount: chained ? prev.originalAccount : ((await accounts.get(item.accountId))?.name ?? 'the first account'),
+      nowAccount: (await accounts.get(alt.item.accountId))?.name ?? 'another account',
+      needsSubs: alt.needsSubs,
+    );
+    if (chained) {
+      s.originalEntry = prev.originalEntry;
+      s.writtenKeys.addAll(prev.writtenKeys);
+    }
+    await VodFailover.carry(s, item, alt.item, pos, dur);
+    VodFailover.lastSwitch.value = s;
+    debugPrint('[playback] ${item.kind} failover: ${item.name} -> ${alt.item.name} on ${s.nowAccount}'
+        '${alt.needsSubs ? ' (other language, checking for English subtitles)' : ''}');
+    try {
+      await play(alt.item, isFailover: true);
+      reconnecting.value = 'Trying it on ${s.nowAccount}...';
+    } catch (_) {
+      reconnecting.value = giveUpMsg;
+    }
+  }
+
+  /// A switched movie or episode started: merge Continue Watching, remember the account,
+  /// and for another-language versions, make sure English subtitles exist.
+  void _afterVodStart() {
+    final s = VodFailover.lastSwitch.value;
+    final cur = current.value;
+    if (s == null || cur == null || s.settled || cur.id != s.now.id) return;
+    VodFailover.settle(s);
+    if (!s.needsSubs) return;
+    Future.delayed(const Duration(seconds: 6), () async {
+      if (current.value?.id != cur.id) return;
+      if (await _hasEnglishSubs()) return;
+      debugPrint('[playback] ${cur.name} is another language without English subtitles; trying the next account');
+      _vodFailover(cur, "Couldn't find it in your language on your other accounts.", countFailure: false);
+    });
+  }
+
+  Future<String> _prop(NativePlayer np, String name) async {
+    try {
+      return await np.getProperty(name);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<bool> _hasEnglishSubs() async {
+    final np = player.platform as NativePlayer;
+    final n = int.tryParse(await _prop(np, 'track-list/count')) ?? 0;
+    for (var i = 0; i < n; i++) {
+      if (await _prop(np, 'track-list/$i/type') != 'sub') continue;
+      final lang = (await _prop(np, 'track-list/$i/lang')).toLowerCase();
+      final title = (await _prop(np, 'track-list/$i/title')).toLowerCase();
+      if (lang == 'en' || lang == 'eng' || title.contains('english')) return true;
+    }
+    return false;
+  }
+
+  /// Undo an automatic switch: back to the account you picked, at the current spot.
+  Future<void> undoVodSwitch() async {
+    final s = VodFailover.lastSwitch.value;
+    if (s == null) return;
+    final pos = player.state.position;
+    await VodFailover.restore(s, pos);
+    debugPrint('[playback] undo: back to ${s.originalAccount}');
+    VodFailover.undoing = true;
+    await play(s.original);
+  }
+
   Future<void> _failoverOrGiveUp(Item item, String giveUpMsg) async {
     final cat = catalog;
     if (item.kind != 'live' || cat == null || _triedAccounts.length >= 4) {
@@ -438,7 +578,12 @@ class PlaybackService {
     }
     final item = current.value;
     final url = _lastUrl;
-    if (item == null || url == null || item.kind != 'live' || _reconnectPending) return;
+    if (item == null || url == null || _reconnectPending) return;
+    if (item.kind == 'movie' || item.kind == 'episode') {
+      _vodError(item, url, why);
+      return;
+    }
+    if (item.kind != 'live') return;
     // Never got going: one retry (covers one-connection-limit providers), then give up clearly.
     if (!_started) {
       // A 403 usually means our old connection is still open, so be patient before failing over.
