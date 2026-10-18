@@ -18,6 +18,9 @@ enum HK {
   volumeDown,
   seekBack,
   seekForward,
+  seekBack30,
+  seekForward30,
+  restart,
   closePlayer,
   backToLast,
   navUp,
@@ -29,39 +32,74 @@ enum HK {
 
 const hkLabels = {
   HK.playPause: 'Play / pause',
-  HK.playSelected: 'Play selected channel',
+  HK.playSelected: 'Play the highlighted channel',
   HK.fullscreen: 'Fullscreen',
   HK.mute: 'Mute',
   HK.volumeUp: 'Volume up',
   HK.volumeDown: 'Volume down',
-  HK.seekBack: 'Back 10 seconds',
-  HK.seekForward: 'Forward 10 seconds',
-  HK.closePlayer: 'Close player (exits fullscreen first)',
+  HK.seekBack: 'Back 15 seconds',
+  HK.seekForward: 'Forward 15 seconds',
+  HK.seekBack30: 'Back 30 seconds',
+  HK.seekForward30: 'Forward 30 seconds',
+  HK.restart: 'Start over',
+  HK.closePlayer: 'Close player (leaves fullscreen or floating first)',
   HK.backToLast: 'Back to last screen',
-  HK.navUp: 'Move selection up',
-  HK.navDown: 'Move selection down',
-  HK.channelNext: 'Next channel',
-  HK.channelPrev: 'Previous channel',
-  HK.popOut: 'Mini player (always on top)',
+  HK.navUp: 'Move highlight up',
+  HK.navDown: 'Move highlight down',
+  HK.channelNext: 'Next episode / channel',
+  HK.channelPrev: 'Previous episode / channel',
+  HK.popOut: 'Float over other apps (and back)',
 };
 
-final _defaults = {
-  HK.playPause: LogicalKeyboardKey.space,
-  HK.playSelected: LogicalKeyboardKey.enter,
-  HK.fullscreen: LogicalKeyboardKey.keyF,
-  HK.mute: LogicalKeyboardKey.keyM,
-  HK.volumeUp: LogicalKeyboardKey.equal,
-  HK.volumeDown: LogicalKeyboardKey.minus,
-  HK.seekBack: LogicalKeyboardKey.bracketLeft,
-  HK.seekForward: LogicalKeyboardKey.bracketRight,
-  HK.closePlayer: LogicalKeyboardKey.escape,
-  HK.backToLast: LogicalKeyboardKey.tab,
-  HK.navUp: LogicalKeyboardKey.arrowUp,
-  HK.navDown: LogicalKeyboardKey.arrowDown,
-  HK.channelNext: LogicalKeyboardKey.pageDown,
-  HK.channelPrev: LogicalKeyboardKey.pageUp,
-  HK.popOut: LogicalKeyboardKey.keyP,
+/// Added to a key id to mean "with Shift held".
+const shiftBit = 1 << 48;
+
+final _defaults = <HK, int>{
+  HK.playPause: LogicalKeyboardKey.space.keyId,
+  HK.playSelected: LogicalKeyboardKey.enter.keyId,
+  HK.fullscreen: LogicalKeyboardKey.keyF.keyId,
+  HK.mute: LogicalKeyboardKey.keyM.keyId,
+  HK.volumeUp: LogicalKeyboardKey.equal.keyId,
+  HK.volumeDown: LogicalKeyboardKey.minus.keyId,
+  HK.seekForward: LogicalKeyboardKey.pageUp.keyId,
+  HK.seekBack: LogicalKeyboardKey.pageDown.keyId,
+  HK.seekForward30: LogicalKeyboardKey.pageUp.keyId | shiftBit,
+  HK.seekBack30: LogicalKeyboardKey.pageDown.keyId | shiftBit,
+  HK.restart: LogicalKeyboardKey.keyR.keyId,
+  HK.closePlayer: LogicalKeyboardKey.escape.keyId,
+  HK.backToLast: LogicalKeyboardKey.tab.keyId,
+  HK.navUp: LogicalKeyboardKey.arrowUp.keyId,
+  HK.navDown: LogicalKeyboardKey.arrowDown.keyId,
+  HK.channelPrev: LogicalKeyboardKey.arrowLeft.keyId,
+  HK.channelNext: LogicalKeyboardKey.arrowRight.keyId,
+  HK.popOut: LogicalKeyboardKey.keyP.keyId,
 };
+
+/// How Settings groups the shortcuts: (title, note, actions).
+const hkSections = <(String, String, List<HK>)>[
+  ('APP', '', [HK.backToLast]),
+  (
+    'PLAYER',
+    'Work in the full player, the mini player and the floating window.',
+    [
+      HK.playPause,
+      HK.seekBack,
+      HK.seekForward,
+      HK.seekBack30,
+      HK.seekForward30,
+      HK.channelPrev,
+      HK.channelNext,
+      HK.restart,
+      HK.volumeUp,
+      HK.volumeDown,
+      HK.mute,
+      HK.fullscreen,
+      HK.closePlayer,
+    ]
+  ),
+  ('MINI PLAYER', '', [HK.popOut]),
+  ('LIVE TV', 'While a channel plays, type its number to jump to it.', [HK.navUp, HK.navDown, HK.playSelected]),
+];
 
 final _modifiers = {
   LogicalKeyboardKey.shiftLeft, LogicalKeyboardKey.shiftRight, LogicalKeyboardKey.controlLeft,
@@ -81,6 +119,8 @@ String keyName(LogicalKeyboardKey k) {
     LogicalKeyboardKey.arrowRight: '→',
     LogicalKeyboardKey.pageUp: 'Page Up',
     LogicalKeyboardKey.pageDown: 'Page Down',
+    LogicalKeyboardKey.home: 'Home',
+    LogicalKeyboardKey.end: 'End',
     LogicalKeyboardKey.equal: '+ / =',
     LogicalKeyboardKey.minus: '−',
   };
@@ -90,7 +130,14 @@ String keyName(LogicalKeyboardKey k) {
   return l.isEmpty ? 'Key ${k.keyId}' : l.toUpperCase();
 }
 
-/// App-wide hotkeys. Ignored while typing in a text box, and Cmd/Ctrl/Alt combos are left alone.
+/// "Shift+Page Up" for a stored binding.
+String bindingName(int b) {
+  final k = LogicalKeyboardKey.findKeyByKeyId(b & ~shiftBit);
+  final base = k == null ? '?' : keyName(k);
+  return (b & shiftBit) != 0 ? 'Shift+$base' : base;
+}
+
+/// App-wide hotkeys. Ignored while typing in a text box; Cmd/Ctrl/Alt combos are left alone.
 /// Screens listen to [events] for list navigation, Enter, and channel flipping.
 class Hotkeys {
   static final events = StreamController<HK>.broadcast();
@@ -114,11 +161,16 @@ class Hotkeys {
     });
   }
 
-  static LogicalKeyboardKey keyFor(HK a) {
-    final id = Prefs.getInt('hotkey.${a.name}');
-    if (id == null) return _defaults[a]!;
-    return LogicalKeyboardKey.findKeyByKeyId(id) ?? _defaults[a]!;
+  /// The key (plus Shift flag) bound to an action.
+  static int bindingFor(HK a) {
+    final v = Prefs.getInt('hotkey.${a.name}');
+    if (v == null || LogicalKeyboardKey.findKeyByKeyId(v & ~shiftBit) == null) return _defaults[a]!;
+    return v;
   }
+
+  /// The plain key for an action (older callers).
+  static LogicalKeyboardKey keyFor(HK a) =>
+      LogicalKeyboardKey.findKeyByKeyId(bindingFor(a) & ~shiftBit) ?? LogicalKeyboardKey.space;
 
   static bool isModifier(LogicalKeyboardKey k) => _modifiers.contains(k);
 
@@ -128,7 +180,9 @@ class Hotkeys {
     return ctx.widget is EditableText || ctx.findAncestorWidgetOfExactType<EditableText>() != null;
   }
 
-  static const _repeatable = {HK.volumeUp, HK.volumeDown, HK.seekBack, HK.seekForward, HK.navUp, HK.navDown};
+  static const _repeatable = {
+    HK.volumeUp, HK.volumeDown, HK.seekBack, HK.seekForward, HK.seekBack30, HK.seekForward30, HK.navUp, HK.navDown,
+  };
 
   static bool _handle(KeyEvent e) {
     if (e is! KeyDownEvent && e is! KeyRepeatEvent) return false;
@@ -139,8 +193,9 @@ class Hotkeys {
     if (capturing || _typing()) return false;
     final hw = HardwareKeyboard.instance;
     if (hw.isMetaPressed || hw.isControlPressed || hw.isAltPressed) return false;
+    final pressed = e.logicalKey.keyId | (hw.isShiftPressed ? shiftBit : 0);
     for (final a in HK.values) {
-      if (keyFor(a) == e.logicalKey) {
+      if (bindingFor(a) == pressed) {
         if (e is KeyRepeatEvent && !_repeatable.contains(a)) return true;
         return _run(a);
       }
@@ -210,10 +265,19 @@ class Hotkeys {
         return true;
       case HK.seekBack:
       case HK.seekForward:
+      case HK.seekBack30:
+      case HK.seekForward30:
         if (cur == null || live) return false;
-        final step = Duration(seconds: a == HK.seekBack ? -10 : 10);
-        final t = pl.state.position + step;
-        pl.seek(t < Duration.zero ? Duration.zero : t);
+        p.skip(switch (a) {
+          HK.seekBack => -15,
+          HK.seekForward => 15,
+          HK.seekBack30 => -30,
+          _ => 30,
+        });
+        return true;
+      case HK.restart:
+        if (cur == null || live) return false;
+        p.restartCurrent();
         return true;
       case HK.closePlayer:
         if (PopOut.active.value) {
@@ -237,8 +301,18 @@ class Hotkeys {
       case HK.backToLast:
         AppNav.index.value = _prev;
         return true;
+      case HK.channelNext:
+      case HK.channelPrev:
+        // Previous/next: episodes when watching a show, channels on live TV.
+        if (cur?.kind == 'episode') {
+          a == HK.channelNext ? p.nextEpisode() : p.prevEpisode();
+          return true;
+        }
+        if (!live) return false;
+        events.add(a);
+        return true;
       default:
-        events.add(a); // list navigation, Enter, channel flipping: handled by screens
+        events.add(a); // list navigation and Enter: handled by Live TV
         return true;
     }
   }
@@ -269,7 +343,8 @@ class ChannelNumberBadge extends StatelessWidget {
   }
 }
 
-/// Settings: click a binding, press the new key. Esc cancels.
+/// Settings: shortcuts grouped by where they matter. Click one, press the new key
+/// (hold Shift for a Shift combo). Esc cancels.
 class HotkeyEditor extends StatefulWidget {
   const HotkeyEditor({super.key});
 
@@ -284,7 +359,10 @@ class _HotkeyEditorState extends State<HotkeyEditor> {
     final a = _capturing;
     if (a == null || e is! KeyDownEvent) return false;
     if (Hotkeys.isModifier(e.logicalKey)) return true;
-    if (e.logicalKey != LogicalKeyboardKey.escape) Prefs.setInt('hotkey.${a.name}', e.logicalKey.keyId);
+    if (e.logicalKey != LogicalKeyboardKey.escape) {
+      final shift = HardwareKeyboard.instance.isShiftPressed;
+      Prefs.setInt('hotkey.${a.name}', e.logicalKey.keyId | (shift ? shiftBit : 0));
+    }
     _stop();
     return true;
   }
@@ -311,6 +389,11 @@ class _HotkeyEditorState extends State<HotkeyEditor> {
 
   @override
   Widget build(BuildContext context) {
+    // Which actions share a key, so we can warn about it.
+    final byKey = <int, List<HK>>{};
+    for (final a in HK.values) {
+      byKey.putIfAbsent(Hotkeys.bindingFor(a), () => []).add(a);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -318,7 +401,7 @@ class _HotkeyEditorState extends State<HotkeyEditor> {
           children: [
             const Expanded(
               child: Text(
-                'Click a key, then press the new one (Esc cancels). Shortcuts work anywhere except while typing in a text box. Click the video to show the controls; double-click to play or pause.',
+                'Click a shortcut, then press the new key. Hold Shift while pressing it for a Shift combo. Esc cancels. Shortcuts work anywhere except while typing in a text box.',
                 style: TextStyle(color: BMColors.dim, fontSize: 12),
               ),
             ),
@@ -334,30 +417,53 @@ class _HotkeyEditorState extends State<HotkeyEditor> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        for (final a in HK.values)
+        for (final (title, note, actions) in hkSections) ...[
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 3),
-            child: Row(
-              children: [
-                Expanded(child: Text(hkLabels[a]!, style: const TextStyle(color: BMColors.text, fontSize: 14))),
-                SizedBox(
-                  width: 160,
-                  child: OutlinedButton(
-                    onPressed: () => _start(a),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _capturing == a ? BMColors.mango : BMColors.text,
-                      side: BorderSide(color: _capturing == a ? BMColors.mango : BMColors.border),
-                    ),
-                    child: Text(
-                      _capturing == a ? 'Press a key…' : keyName(Hotkeys.keyFor(a)),
-                      style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 13),
+            padding: const EdgeInsets.only(top: 14, bottom: 4),
+            child: Text(title,
+                style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 11, letterSpacing: 1.5, color: BMColors.mango)),
+          ),
+          if (note.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(note, style: const TextStyle(color: BMColors.dim, fontSize: 12)),
+            ),
+          for (final a in actions)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(hkLabels[a]!, style: const TextStyle(color: BMColors.text, fontSize: 14)),
+                        if ((byKey[Hotkeys.bindingFor(a)]?.length ?? 0) > 1)
+                          Text(
+                            'Same key as: ${byKey[Hotkeys.bindingFor(a)]!.where((o) => o != a).map((o) => hkLabels[o]).join(', ')}',
+                            style: const TextStyle(color: Colors.orangeAccent, fontSize: 11),
+                          ),
+                      ],
                     ),
                   ),
-                ),
-              ],
+                  SizedBox(
+                    width: 170,
+                    child: OutlinedButton(
+                      onPressed: () => _start(a),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _capturing == a ? BMColors.mango : BMColors.text,
+                        side: BorderSide(color: _capturing == a ? BMColors.mango : BMColors.border),
+                      ),
+                      child: Text(
+                        _capturing == a ? 'Press a key…' : bindingName(Hotkeys.bindingFor(a)),
+                        style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 13),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+        ],
       ],
     );
   }

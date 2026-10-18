@@ -9,6 +9,7 @@ import '../services.dart';
 import '../storage/database.dart';
 import 'player_controls.dart';
 import 'track_menu.dart';
+import 'transport.dart';
 
 /// Which screen shows the full player for this kind of item.
 int screenFor(Item i) => i.kind == 'live' ? AppNav.live : (i.kind == 'movie' ? AppNav.movies : AppNav.shows);
@@ -165,6 +166,46 @@ class _MiniLayerState extends State<_MiniLayer> {
   Offset? _pos;
   bool _dragging = false;
   bool _hover = false;
+  bool _controlsUp = false;
+  bool _fading = false;
+  Timer? _fadeT;
+  Timer? _hideT;
+
+  /// Controls appear the instant the mouse arrives.
+  void _hoverOn() {
+    _fadeT?.cancel();
+    _hideT?.cancel();
+    setState(() {
+      _hover = true;
+      _controlsUp = true;
+      _fading = false;
+    });
+  }
+
+  /// They stay 10 seconds after the mouse leaves, fading over the last 1.5.
+  void _hoverOff() {
+    setState(() => _hover = false);
+    _fadeT?.cancel();
+    _hideT?.cancel();
+    _fadeT = Timer(const Duration(milliseconds: 8500), () {
+      if (mounted) setState(() => _fading = true);
+    });
+    _hideT = Timer(const Duration(seconds: 10), () {
+      if (mounted) {
+        setState(() {
+          _controlsUp = false;
+          _fading = false;
+        });
+      }
+    });
+  }
+
+  Widget _fade(Widget c) => AnimatedOpacity(
+        opacity: _fading ? 0 : 1,
+        duration: _fading ? const Duration(milliseconds: 1500) : Duration.zero,
+        child: c,
+      );
+
 
   Widget _video() => Video(
         controller: Services.playback.controller,
@@ -268,7 +309,6 @@ class _MiniLayerState extends State<_MiniLayer> {
   }
 
   Widget _bottomBar(BuildContext context, Item cur) {
-    final pl = Services.playback.player;
     final live = cur.kind == 'live';
     return Container(
       padding: const EdgeInsets.fromLTRB(2, 12, 6, 2),
@@ -279,27 +319,18 @@ class _MiniLayerState extends State<_MiniLayer> {
           colors: [Color(0xCC000000), Color(0x00000000)],
         ),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          if (live)
-            _btn(Icons.skip_previous, 'Previous channel (Page Up)', () => Hotkeys.events.add(HK.channelPrev))
-          else
-            _btn(Icons.replay_10, 'Back 10 seconds', () => _seek(-10)),
-          StreamBuilder<bool>(
-            stream: pl.stream.playing,
-            initialData: pl.state.playing,
-            builder: (context, snap) {
-              final playing = snap.data ?? false;
-              return _btn(playing ? Icons.pause : Icons.play_arrow, playing ? 'Pause' : 'Play', () => pl.playOrPause());
-            },
+          if (!live) const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: MiniTimeBar()),
+          Row(
+            children: [
+              const TransportButtons(full: false, iconSize: 20),
+              const Spacer(),
+              if (live) _btn(Icons.dialpad, 'Go to channel number (or just type the digits)', () => _askNumber(context)),
+              const VolumeButton(),
+            ],
           ),
-          if (live)
-            _btn(Icons.skip_next, 'Next channel (Page Down)', () => Hotkeys.events.add(HK.channelNext))
-          else
-            _btn(Icons.forward_10, 'Forward 10 seconds', () => _seek(10)),
-          const Spacer(),
-          if (live) _btn(Icons.dialpad, 'Go to channel number (or just type the digits)', () => _askNumber(context)),
-          const VolumeButton(),
         ],
       ),
     );
@@ -308,9 +339,10 @@ class _MiniLayerState extends State<_MiniLayer> {
   List<Widget> _overlays(BuildContext context, Item cur, {required bool popped}) => [
         const Positioned.fill(child: IgnorePointer(child: ChannelNumberBadge())),
         if (_entering) Positioned.fill(child: _numberBox()),
-        if (_hover && !_dragging) ...[
-          Positioned(top: 0, left: 0, right: 0, child: _topBar(cur, popped: popped)),
-          Positioned(bottom: 0, left: 0, right: 0, child: _bottomBar(context, cur)),
+        const Positioned.fill(child: UpNextCard(compact: true)),
+        if (_controlsUp && !_dragging) ...[
+          Positioned(top: 0, left: 0, right: 0, child: _fade(_topBar(cur, popped: popped))),
+          Positioned(bottom: 0, left: 0, right: 0, child: _fade(_bottomBar(context, cur))),
         ],
       ];
 
@@ -330,8 +362,8 @@ class _MiniLayerState extends State<_MiniLayer> {
             child: Material(
             color: Colors.black,
             child: MouseRegion(
-              onEnter: (_) => setState(() => _hover = true),
-              onExit: (_) => setState(() => _hover = false),
+              onEnter: (_) => _hoverOn(),
+              onExit: (_) => _hoverOff(),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -369,8 +401,8 @@ class _MiniLayerState extends State<_MiniLayer> {
                   width: _w,
                   height: _h,
                   child: MouseRegion(
-                    onEnter: (_) => setState(() => _hover = true),
-                    onExit: (_) => setState(() => _hover = false),
+                    onEnter: (_) => _hoverOn(),
+                    onExit: (_) => _hoverOff(),
                     child: GestureDetector(
                       onPanStart: (_) => setState(() {
                         _dragging = true;

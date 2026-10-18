@@ -81,6 +81,8 @@ class PlaybackService {
         _logTracks();
         _vodRetries = 0;
         _afterVodStart();
+        _ensureWatchers();
+        _refreshActiveTracks();
         final h = Uri.tryParse(_lastUrl ?? '')?.host ?? '';
         if (h.isNotEmpty) health?.ok(h);
       }
@@ -202,6 +204,7 @@ class PlaybackService {
     if (!isFailover) {
       VodFailover.lastSwitch.value = null;
       _vodRetries = 0;
+      cancelUpNext(); // a new pick ends any Up next countdown
       if (VodFailover.undoing) {
         VodFailover.undoing = false;
       } else {
@@ -453,6 +456,100 @@ class PlaybackService {
     final np = player.platform;
     if (np is NativePlayer) await np.setProperty('sub-visibility', 'no');
     TrackMemory.save(current.value, subsOn: false);
+  }
+
+  // ---------- Remote-style controls ----------
+
+  /// Skip within a movie or episode (negative = back).
+  Future<void> skip(int secs) async {
+    final s = player.state;
+    var t = s.position + Duration(seconds: secs);
+    if (t < Duration.zero) t = Duration.zero;
+    if (s.duration > Duration.zero && t > s.duration) t = s.duration - const Duration(seconds: 1);
+    await player.seek(t);
+  }
+
+  Future<void> restartCurrent() => player.seek(Duration.zero);
+
+  Future<void> nextEpisode() => _stepEpisode(1);
+  Future<void> prevEpisode() => _stepEpisode(-1);
+
+  Future<void> _stepEpisode(int step) async {
+    final cur = current.value;
+    if (cur == null || cur.kind != 'episode') return;
+    final n = await VodFailover.neighborEpisode(cur, step);
+    if (current.value?.id != cur.id) return;
+    if (n == null) {
+      final msg = step > 0 ? 'That was the last episode.' : 'This is the first episode.';
+      reconnecting.value = msg;
+      Future.delayed(const Duration(seconds: 3), () {
+        if (reconnecting.value == msg) reconnecting.value = null;
+      });
+      return;
+    }
+    cancelUpNext();
+    await play(n);
+  }
+
+  /// "Up next" after an episode ends: 10-second countdown, then the next episode.
+  final upNext = ValueNotifier<Item?>(null);
+  final upNextIn = ValueNotifier<int>(0);
+  Timer? _upNextTimer;
+
+  void cancelUpNext() {
+    _upNextTimer?.cancel();
+    _upNextTimer = null;
+    if (upNext.value != null) upNext.value = null;
+  }
+
+  Future<void> playUpNext() async {
+    final n = upNext.value;
+    cancelUpNext();
+    if (n != null) await play(n);
+  }
+
+  Future<void> _onEnded() async {
+    final cur = current.value;
+    if (cur == null || cur.kind != 'episode' || upNext.value != null) return;
+    final next = await VodFailover.neighborEpisode(cur, 1);
+    if (next == null || current.value?.id != cur.id) return;
+    debugPrint('[playback] episode ended, up next: ${next.name}');
+    upNextIn.value = 10;
+    upNext.value = next;
+    _upNextTimer?.cancel();
+    _upNextTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (current.value?.id != cur.id) {
+        cancelUpNext();
+        return;
+      }
+      upNextIn.value = upNextIn.value - 1;
+      if (upNextIn.value <= 0) playUpNext();
+    });
+  }
+
+  // ---------- Which tracks are actually playing (Track menu checkmarks) ----------
+
+  String activeAudioId = '';
+  String activeSubId = '';
+  final trackTick = ValueNotifier<int>(0);
+  bool _watching = false;
+
+  void _ensureWatchers() {
+    if (_watching) return;
+    _watching = true;
+    player.stream.completed.listen((done) {
+      if (done) _onEnded();
+    });
+    player.stream.track.listen((_) => _refreshActiveTracks());
+    player.stream.tracks.listen((_) => _refreshActiveTracks());
+  }
+
+  Future<void> _refreshActiveTracks() async {
+    final np = player.platform;
+    if (np is! NativePlayer) return;
+    activeAudioId = await _prop(np, 'current-tracks/audio/id');
+    activeSubId = await _prop(np, 'current-tracks/sub/id');
+    trackTick.value++;
   }
 
   Future<void> _failoverOrGiveUp(Item item, String giveUpMsg) async {

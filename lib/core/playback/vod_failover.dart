@@ -254,6 +254,77 @@ class VodFailover {
     return null;
   }
 
+  static final _epCache = <String, (DateTime, List<Map>)>{};
+
+  /// Every episode of a show on its account, in order (cached for 30 minutes).
+  static Future<List<Map>> _allEpisodes(Item show) async {
+    final k = '${show.accountId}|${show.streamId}';
+    final c = _epCache[k];
+    if (c != null && DateTime.now().difference(c.$1) < const Duration(minutes: 30)) return c.$2;
+    final a = await Services.accounts.get(show.accountId);
+    if (a == null || a.type != 'xtream') return const [];
+    final x = XtreamClient(a.server, a.username, await Services.accounts.password(a.id) ?? '');
+    final j = await x.seriesInfo(show.streamId);
+    final eps = j is Map ? j['episodes'] : null;
+    final lists = eps is Map ? eps.values : (eps is List ? [eps] : const []);
+    final all = <Map>[
+      for (final l in lists)
+        if (l is List) ...l.whereType<Map>(),
+    ];
+    int s(Map e) => int.tryParse('${e['season'] ?? ''}') ?? 0;
+    int n(Map e) => int.tryParse('${e['episode_num'] ?? ''}') ?? 0;
+    all.sort((a, b) => s(a) != s(b) ? s(a).compareTo(s(b)) : n(a).compareTo(n(b)));
+    _epCache[k] = (DateTime.now(), all);
+    return all;
+  }
+
+  static Item _episodeItem(Item show, Map e) {
+    final season = int.tryParse('${e['season'] ?? ''}') ?? 0;
+    final number = int.tryParse('${e['episode_num'] ?? ''}') ?? 0;
+    final id = '${e['id'] ?? ''}';
+    final info = e['info'];
+    final img = info is Map ? '${info['movie_image'] ?? ''}' : '';
+    final title = '${e['title'] ?? ''}'.trim();
+    final label = 'S$season E$number${title.isEmpty ? '' : '  $title'}';
+    return Item(
+      id: -(int.tryParse(id) ?? id.hashCode.abs()),
+      accountId: show.accountId,
+      kind: 'episode',
+      name: '${show.name}   $label',
+      nameLower: '',
+      category: show.category,
+      logo: img.isNotEmpty ? img : show.logo,
+      streamId: id,
+      ext: '${e['container_extension'] ?? 'mp4'}',
+      url: '',
+      position: 0,
+      genre: show.genre,
+      country: show.country,
+      language: show.language,
+    );
+  }
+
+  /// The episode before/after this one (crossing seasons), on the same account.
+  static Future<Item?> neighborEpisode(Item ep, int step) async {
+    try {
+      final show = await showPageFor(ep);
+      final me = _episodeOf(ep);
+      if (show == null || me == null) return null;
+      final all = await _allEpisodes(show);
+      var i = all.indexWhere((e) => '${e['id']}' == ep.streamId);
+      if (i < 0) {
+        i = all.indexWhere((e) =>
+            int.tryParse('${e['season']}') == me.season && int.tryParse('${e['episode_num']}') == me.number);
+      }
+      final j = i + step;
+      if (i < 0 || j < 0 || j >= all.length) return null;
+      return _episodeItem(show, all[j]);
+    } catch (e) {
+      debugPrint('[playback] next/previous episode lookup failed: $e');
+      return null;
+    }
+  }
+
   /// The show (series) an episode belongs to, on the same account.
   static Future<Item?> showPageFor(Item ep) async {
     final show = _episodeOf(ep)?.show;

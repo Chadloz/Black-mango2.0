@@ -9,6 +9,7 @@ import '../playback/still_watching.dart';
 import 'mini_player.dart';
 import '../hotkeys.dart';
 import '../playback/vod_failover.dart';
+import 'transport.dart';
 
 String _time(Duration d) {
   String two(int n) => n.toString().padLeft(2, '0');
@@ -138,6 +139,7 @@ class _BMControlsState extends State<BMControls> {
                 Positioned(left: 0, right: 0, bottom: 0, child: _fade(_bar(fs))),
                 const Positioned.fill(child: IgnorePointer(child: ChannelNumberBadge())),
                 const Positioned(left: 12, top: 12, child: VodSwitchBanner()),
+                const Positioned.fill(child: UpNextCard()),
                 const Positioned.fill(child: StillWatchingOverlay()),
               ],
             ),
@@ -167,12 +169,7 @@ class _BMControlsState extends State<BMControls> {
         final narrow = box.maxWidth < 360; // small player: drop the float button (P still works)
         return Row(
         children: [
-          IconButton(
-            tooltip: _playing ? 'Pause (Space)' : 'Play (Space)',
-            color: Colors.white,
-            onPressed: _toggle,
-            icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
-          ),
+          TransportButtons(full: true, width: box.maxWidth),
           const SizedBox(width: 4),
           Expanded(child: _live ? _liveBadge() : _seekBar()),
           if (!fs && !narrow)

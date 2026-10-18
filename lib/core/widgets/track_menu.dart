@@ -176,6 +176,18 @@ class PlayerMoreMenu extends StatelessWidget {
             onPressed: () => Services.playback.undoVodSwitch(),
             child: Text('Back to ${VodFailover.lastSwitch.value!.originalAccount}'),
           ),
+        if (Services.playback.current.value?.kind == 'movie')
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.info_outline, size: 18),
+            onPressed: () async {
+              final cur = Services.playback.current.value;
+              if (cur == null) return;
+              if (PopOut.active.value) await PopOut.backToFull();
+              AppNav.index.value = AppNav.movies;
+              AppNav.select.value = cur;
+            },
+            child: const Text('Movie details'),
+          ),
         if (Services.playback.current.value?.kind == 'episode')
           MenuItemButton(
             leadingIcon: const Icon(Icons.video_library_outlined, size: 18),
@@ -221,7 +233,12 @@ class TrackMenu extends StatelessWidget {
   const TrackMenu({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+        valueListenable: Services.playback.trackTick,
+        builder: (context, _, _) => _build(context),
+      );
+
+  Widget _build(BuildContext context) {
     final p = Services.playback.player;
     return StreamBuilder<Tracks>(
       stream: p.stream.tracks,
@@ -256,7 +273,8 @@ class TrackMenu extends StatelessWidget {
                         const MenuItemButton(onPressed: null, child: Text('No audio track found')),
                       for (var i = 0; i < audio.length; i++)
                         MenuItemButton(
-                          leadingIcon: mark(cur.audio.id == audio[i].id),
+                          leadingIcon: mark(cur.audio.id == audio[i].id ||
+                              (cur.audio.id == 'auto' && Services.playback.activeAudioId == audio[i].id)),
                           onPressed: () => Services.playback.chooseAudio(audio[i]),
                           child: Text(_label(audio[i].title, audio[i].language, i)),
                         ),
@@ -272,7 +290,9 @@ class TrackMenu extends StatelessWidget {
                       ),
                       for (var i = 0; i < subs.length; i++)
                         MenuItemButton(
-                          leadingIcon: mark(subsOn && cur.subtitle.id == subs[i].id),
+                          leadingIcon: mark(subsOn &&
+                              (cur.subtitle.id == subs[i].id ||
+                                  (cur.subtitle.id == 'auto' && Services.playback.activeSubId == subs[i].id))),
                           onPressed: () => Services.playback.chooseSubtitle(subs[i]),
                           child: Text(_label(subs[i].title, subs[i].language, i)),
                         ),
