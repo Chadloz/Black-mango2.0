@@ -128,6 +128,7 @@ class _LiveScreenState extends State<LiveScreen> {
       _genres = genres;
       _genre = genre;
       _items = _favOnly ? items.where((x) => _favKeys.contains(favKey(x))).toList() : items;
+      if (Prefs.getStr('live.sort') == 'az') _items = _sortedAz(_items);
       _sel = -1;
       _loading = false;
     });
@@ -197,6 +198,25 @@ class _LiveScreenState extends State<LiveScreen> {
     _scroll.jumpTo(target);
   }
 
+  static final _tagPrefix =
+      RegExp(r'^\s*(?:\|[^|]{1,8}\||\[[^\]]{1,8}\]|[a-z]{2,4}(?:[-_ ][a-z]{2,3})?\s*[:|\-–])\s*');
+
+  /// A-Z by the channel's own name: "US: ESPN" and "UK: ESPN" sort together under E.
+  List<Item> _sortedAz(List<Item> items) {
+    String key(Item i) {
+      var s = i.name.toLowerCase().trim();
+      for (var n = 0; n < 2; n++) {
+        final t = s.replaceFirst(_tagPrefix, '');
+        if (t == s || t.trim().isEmpty) break;
+        s = t;
+      }
+      s = s.replaceFirst(RegExp(r'^(?:vip|hd|fhd|uhd|4k)\s+'), ''); // "VIP SKY CINEMA" files under S
+      return s.replaceAll(RegExp(r'[^a-z0-9 ]'), '').trim();
+    }
+    final keyed = [for (final i in items) (key(i), i)]..sort((a, b) => a.$1.compareTo(b.$1));
+    return [for (final k in keyed) k.$2];
+  }
+
   void _onPrefs() {
     if (mounted) setState(() {});
   }
@@ -246,12 +266,35 @@ class _LiveScreenState extends State<LiveScreen> {
           final cur = (playing != null && playing.kind == 'live') ? playing : null;
           final countLine = Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                _loading ? 'Loading...' : '${_fmt(_items.length)} channels',
-                style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 11, color: BMColors.dim),
-              ),
+            child: Row(
+              children: [
+                Text(
+                  _loading ? 'Loading...' : '${_fmt(_items.length)} channels',
+                  style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 11, color: BMColors.dim),
+                ),
+                const Spacer(),
+                MenuAnchor(
+                  menuChildren: [
+                    for (final (value, label) in const [(null, 'Provider order'), ('az', 'A–Z')])
+                      MenuItemButton(
+                        leadingIcon: Icon(Prefs.getStr('live.sort') == value ? Icons.check : null, size: 16),
+                        onPressed: () {
+                          Prefs.setStr('live.sort', value);
+                          _reload();
+                        },
+                        child: Text(label),
+                      ),
+                  ],
+                  builder: (context, ctrl, _) => TextButton.icon(
+                    onPressed: () => ctrl.isOpen ? ctrl.close() : ctrl.open(),
+                    icon: const Icon(Icons.sort, size: 14, color: BMColors.dim),
+                    label: Text(
+                      'Sort: ${Prefs.getStr('live.sort') == 'az' ? 'A–Z' : 'Provider order'}',
+                      style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 11, color: BMColors.dim),
+                    ),
+                  ),
+                ),
+              ],
             ),
           );
           // Wide window: guide on the left, video fills the rest.
