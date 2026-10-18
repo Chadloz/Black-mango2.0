@@ -4,16 +4,20 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../prefs.dart';
 
-/// A tiny relay on 127.0.0.1 for live .ts channels.
+/// A tiny relay on 127.0.0.1 for live .ts channels. It does three things:
 ///
-/// Some US channels label Dolby Digital Plus audio with the ATSC stream type 0x87,
-/// which the bundled (older) FFmpeg skips, so they play silent. The relay passes
-/// the stream through untouched except for that one label in the track table
-/// (PMT): 0x87 -> 0x81 (AC-3), with the table's CRC recomputed. FFmpeg's Dolby
-/// reader then detects the real E-AC-3 data and decodes it.
+/// 1. Dolby fix: some channels label Dolby Digital Plus audio with the ATSC stream type
+///    0x87, which the bundled FFmpeg skips (silent channel). The relay relabels it 0x81
+///    in the track table and re-signs the table's checksum.
+/// 2. Seamless reconnects: when the provider hangs up mid-stream, the relay reconnects
+///    to the provider itself and keeps the player's connection open, so the player sees
+///    one continuous stream instead of a break.
+/// 3. No repeats: after a reconnect, providers often re-send footage already delivered.
+///    The relay drops anything at or before the last timestamp it passed along, and
+///    stitches the stream's packet counters back into an unbroken sequence.
 ///
-/// Provider status codes pass through unchanged (403 busy, 404, 5xx), and the
-/// upstream connection closes as soon as the player disconnects.
+/// Provider status codes pass through unchanged (403 busy, 404, 5xx), and the provider
+/// connection closes the moment the player hangs up (one-connection accounts).
 class TsRelay {
   static HttpServer? _server;
   static final _urls = <String, String>{};
@@ -66,8 +70,8 @@ class TsRelay {
       ..autoUncompress = false;
     Socket? socket;
     var closed = false;
-    // Closes both sides. Called the moment either the player or the provider hangs up,
-    // so the provider's connection slot is freed right away (one-connection accounts).
+    // Closes both sides. Called the moment the player hangs up or we give up,
+    // so the provider's connection slot is freed right away.
     void shutdown() {
       if (closed) return;
       closed = true;
@@ -75,13 +79,21 @@ class TsRelay {
       socket?.destroy();
     }
 
-    try {
+    Future<HttpClientResponse> open({bool fresh = false}) async {
       final up = await client.getUrl(Uri.parse(target));
-      for (final h in const ['user-agent', 'range', 'accept']) {
+      for (final h in const ['user-agent', 'accept']) {
         final v = req.headers.value(h);
         if (v != null) up.headers.set(h, v);
       }
-      final r = await up.close();
+      if (!fresh) {
+        final range = req.headers.value('range');
+        if (range != null) up.headers.set('range', range);
+      }
+      return up.close();
+    }
+
+    try {
+      var r = await open();
       res.statusCode = r.statusCode;
       res.reasonPhrase = r.reasonPhrase;
       for (final h in const ['content-type', 'content-range', 'accept-ranges']) {
@@ -95,6 +107,7 @@ class TsRelay {
         return;
       }
       res.persistentConnection = false;
+      final seamless = r.contentLength < 0; // live streams have no fixed length
       if (r.contentLength >= 0) {
         res.contentLength = r.contentLength;
       } else {
@@ -105,29 +118,69 @@ class TsRelay {
       // The player hanging up (channel change, stop, close) shows up as its socket closing.
       s.listen((_) {}, onDone: shutdown, onError: (_) => shutdown(), cancelOnError: true);
 
-      final started = DateTime.now();
-      var bytes = 0;
-      final patcher = _TsPatcher(() => debugPrint('[relay] Dolby Digital Plus audio relabeled so it plays'));
-      try {
-        await s.addStream(r.transform(StreamTransformer<List<int>, List<int>>.fromHandlers(
-          handleData: (d, sink) {
-            bytes += d.length;
-            final o = patcher.process(d);
-            if (o.isNotEmpty) sink.add(o);
-          },
-          handleDone: (sink) {
-            final o = patcher.flush();
-            if (o.isNotEmpty) sink.add(o);
-            sink.close();
-          },
-        )));
-        await s.flush();
-        if (!closed) {
-          final secs = DateTime.now().difference(started).inSeconds;
-          debugPrint('[relay] provider ended $name after ${secs}s (${(bytes / 1e6).toStringAsFixed(1)} MB)');
+      final filter = _TsFilter(
+        onDolby: () => debugPrint('[relay] Dolby Digital Plus audio relabeled so it plays'),
+        onResume: (m) => debugPrint('[relay] $name reconnected: $m'),
+      );
+      var quickEnds = 0;
+      while (!closed) {
+        final started = DateTime.now();
+        var bytes = 0;
+        var pending = 0;
+        try {
+          // A provider that goes silent for 8 seconds counts as a hang-up.
+          await for (final chunk in r.timeout(const Duration(seconds: 8))) {
+            if (closed) break;
+            bytes += chunk.length;
+            final o = filter.process(chunk);
+            if (o.isNotEmpty) {
+              s.add(o);
+              pending += o.length;
+            }
+            if (pending > (1 << 20)) {
+              pending = 0;
+              await s.flush();
+            }
+          }
+        } catch (_) {
+          // Provider stalled, or the player hung up mid-write.
         }
-      } catch (_) {
-        // The player hung up mid-stream: normal on channel change.
+        if (closed) break;
+        final secs = DateTime.now().difference(started).inMilliseconds / 1000;
+        debugPrint('[relay] provider ended $name after ${secs.toStringAsFixed(0)}s '
+            '(${(bytes / 1e6).toStringAsFixed(1)} MB)${seamless ? '; reconnecting' : ''}');
+        if (!seamless) break;
+        quickEnds = secs < 3 ? quickEnds + 1 : 0;
+        if (quickEnds >= 5) {
+          debugPrint('[relay] $name keeps dropping; handing it back to the player');
+          break;
+        }
+        HttpClientResponse? next;
+        for (var attempt = 0; attempt < 4 && !closed && next == null; attempt++) {
+          await Future.delayed(Duration(milliseconds: attempt == 0 ? 300 : 1500));
+          if (closed) break;
+          try {
+            final rr = await open(fresh: true);
+            if (rr.statusCode < 400) {
+              next = rr;
+            } else {
+              debugPrint('[relay] $name reconnect refused (HTTP ${rr.statusCode})');
+              rr.listen((_) {}).cancel();
+            }
+          } catch (e) {
+            debugPrint('[relay] $name reconnect failed: $e');
+          }
+        }
+        if (next == null) break;
+        filter.markReconnect();
+        r = next;
+      }
+      if (!closed) {
+        final rest = filter.flush();
+        if (rest.isNotEmpty) s.add(rest);
+        try {
+          await s.flush();
+        } catch (_) {}
       }
     } catch (e) {
       // Provider unreachable before anything was sent: report it as a server problem.
@@ -144,40 +197,69 @@ class TsRelay {
   }
 }
 
-/// Walks 188-byte TS packets and relabels E-AC-3 (0x87) as AC-3 (0x81) in the PMT.
-class _TsPatcher {
-  _TsPatcher(this.onPatched);
-  final VoidCallback onPatched;
+/// Walks 188-byte TS packets: relabels Dolby (0x87 -> 0x81) in the track table, and right
+/// after a provider reconnect drops footage already delivered, then stops as soon as the
+/// stream has caught up. Normal playback is never touched. Compares DECODE timestamps,
+/// which always move forward (display timestamps don't, with B-frames).
+class _TsFilter {
+  _TsFilter({required this.onDolby, required this.onResume});
+  final VoidCallback onDolby;
+  final void Function(String) onResume;
+
+  static const _videoTypes = {0x01, 0x02, 0x1B, 0x24};
+
   final _pmtPids = <int>{};
+  final _esPids = <int>{};
+  int? _videoPid;
+  final _lastTs = <int, int>{}; // per track: last decode timestamp passed along (90 kHz)
+  final _catching = <int>{}; // tracks still skipping replayed footage after a reconnect
+  final _dropping = <int, bool>{};
+  final _outCc = <int, int>{};
+  int _reconnects = 0;
   Uint8List _carry = Uint8List(0);
-  bool _told = false;
+  bool _toldDolby = false;
+
+  void markReconnect() {
+    _reconnects++;
+    _catching
+      ..clear()
+      ..addAll(_lastTs.keys);
+    // Until each track's next frame start shows where it resumes, hold its packets back.
+    for (final p in {..._dropping.keys, ..._esPids}) {
+      _dropping[p] = true;
+    }
+  }
 
   Uint8List process(List<int> chunk) {
-    final Uint8List data;
+    final Uint8List d;
     if (_carry.isEmpty) {
-      data = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
+      d = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
     } else {
-      data = Uint8List(_carry.length + chunk.length)
+      d = Uint8List(_carry.length + chunk.length)
         ..setRange(0, _carry.length, _carry)
         ..setRange(_carry.length, _carry.length + chunk.length, chunk);
     }
-    final n = data.length;
+    final n = d.length;
     var i = 0;
+    var w = 0;
     while (i + 188 <= n) {
-      if (data[i] != 0x47) {
-        // Lost packet alignment: skip ahead to the next believable packet start (bytes pass through as-is).
+      if (d[i] != 0x47) {
+        // Lost packet alignment: skip ahead to the next believable packet start.
         var j = i + 1;
-        while (j < n && !(data[j] == 0x47 && (j + 188 >= n || data[j + 188] == 0x47))) {
+        while (j < n && !(d[j] == 0x47 && (j + 188 >= n || d[j + 188] == 0x47))) {
           j++;
         }
         i = j;
         continue;
       }
-      _inspect(data, i);
+      if (_keep(d, i)) {
+        if (w != i) d.setRange(w, w + 188, d, i);
+        w += 188;
+      }
       i += 188;
     }
-    _carry = Uint8List.fromList(Uint8List.sublistView(data, i));
-    return Uint8List.sublistView(data, 0, i);
+    _carry = Uint8List.fromList(Uint8List.sublistView(d, i));
+    return Uint8List.sublistView(d, 0, w);
   }
 
   Uint8List flush() {
@@ -186,17 +268,76 @@ class _TsPatcher {
     return c;
   }
 
-  void _inspect(Uint8List d, int i) {
-    if ((d[i + 1] & 0x40) == 0) return; // only packets that start a table
+  static int _ts(Uint8List d, int o) =>
+      ((d[o] >> 1) & 7) << 30 | d[o + 1] << 22 | (d[o + 2] >> 1) << 15 | d[o + 3] << 7 | d[o + 4] >> 1;
+
+  bool _keep(Uint8List d, int i) {
+    final pusi = (d[i + 1] & 0x40) != 0;
     final pid = ((d[i + 1] & 0x1F) << 8) | d[i + 2];
-    if (pid != 0 && !_pmtPids.contains(pid)) return;
+    if (pid == 0x1FFF) return true; // padding
     final afc = (d[i + 3] >> 4) & 3;
-    if (afc == 0 || afc == 2) return;
-    final end = i + 188;
+    final hasPayload = afc == 1 || afc == 3;
     var p = i + 4;
-    if (afc == 3) p += 1 + d[p];
-    if (p >= end) return;
-    p += 1 + d[p]; // pointer field
+    if (afc == 2 || afc == 3) p += 1 + d[i + 4];
+    final end = i + 188;
+    if (pusi && hasPayload && p < end) {
+      if (pid == 0 || _pmtPids.contains(pid)) {
+        _tables(d, p, end, pid);
+      } else if (p + 3 <= end && d[p] == 0 && d[p + 1] == 0 && d[p + 2] == 1) {
+        // Start of a frame (PES): its decode timestamp (DTS if present, else PTS).
+        int? t;
+        if (p + 14 <= end && (d[p + 7] & 0x80) != 0) {
+          t = _ts(d, p + 9);
+          if ((d[p + 7] & 0xC0) == 0xC0 && p + 19 <= end) t = _ts(d, p + 14);
+        }
+        if (t == null) {
+          _dropping[pid] = false;
+        } else if (_catching.contains(pid)) {
+          final last = _lastTs[pid]!;
+          final diff = t - last;
+          if (diff.abs() > 60 * 90000) {
+            // Provider restarted its clock: don't risk dropping real footage.
+            _catching.remove(pid);
+            _dropping[pid] = false;
+            _lastTs[pid] = t;
+            if (pid == _videoPid) onResume('provider restarted its clock; passing it through');
+          } else if (t <= last) {
+            _dropping[pid] = true; // already delivered before the hang-up
+          } else {
+            _catching.remove(pid); // caught up: from here on, everything passes
+            _dropping[pid] = false;
+            _lastTs[pid] = t;
+            if (pid == _videoPid) onResume('caught up after skipping repeated footage');
+          }
+        } else {
+          _dropping[pid] = false;
+          _lastTs[pid] = t;
+        }
+      } else {
+        _dropping[pid] = false; // tables and other non-frame data
+      }
+    }
+    if (_dropping[pid] == true) return false;
+
+    // After a reconnect, keep each track's packet counter unbroken across the splice.
+    final cc = d[i + 3] & 0x0F;
+    final prev = _outCc[pid];
+    if (_reconnects > 0) {
+      if (prev == null) {
+        _outCc[pid] = cc;
+      } else {
+        final next = hasPayload ? (prev + 1) & 0x0F : prev;
+        d[i + 3] = (d[i + 3] & 0xF0) | next;
+        _outCc[pid] = next;
+      }
+    } else if (hasPayload || prev == null) {
+      _outCc[pid] = cc;
+    }
+    return true;
+  }
+
+  void _tables(Uint8List d, int p0, int end, int pid) {
+    final p = p0 + 1 + d[p0]; // pointer field
     if (p + 12 > end) return;
     final tableId = d[p];
     final secLen = ((d[p + 1] & 0x0F) << 8) | d[p + 2];
@@ -214,6 +355,9 @@ class _TsPatcher {
     var k = p + 12 + progInfo;
     var changed = false;
     while (k + 5 <= secEnd - 4) {
+      final esPid = ((d[k + 1] & 0x1F) << 8) | d[k + 2];
+      _esPids.add(esPid);
+      if (_videoTypes.contains(d[k]) && _videoPid == null) _videoPid = esPid;
       if (d[k] == 0x87) {
         d[k] = 0x81;
         changed = true;
@@ -226,9 +370,9 @@ class _TsPatcher {
     d[secEnd - 3] = (crc >> 16) & 0xFF;
     d[secEnd - 2] = (crc >> 8) & 0xFF;
     d[secEnd - 1] = crc & 0xFF;
-    if (!_told) {
-      _told = true;
-      onPatched();
+    if (!_toldDolby) {
+      _toldDolby = true;
+      onDolby();
     }
   }
 

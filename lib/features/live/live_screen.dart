@@ -268,11 +268,14 @@ class _LiveScreenState extends State<LiveScreen> {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
             child: Row(
               children: [
-                Text(
-                  _loading ? 'Loading...' : '${_fmt(_items.length)} channels',
-                  style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 11, color: BMColors.dim),
+                Expanded(
+                  child: Text(
+                    _loading ? 'Loading...' : '${_fmt(_items.length)} channels',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 11, color: BMColors.dim),
+                  ),
                 ),
-                const Spacer(),
                 MenuAnchor(
                   menuChildren: [
                     for (final (value, label) in const [(null, 'Provider order'), ('az', 'A–Z')])

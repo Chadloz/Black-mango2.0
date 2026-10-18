@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'track_memory.dart';
 import 'vod_failover.dart';
 import 'ts_relay.dart';
@@ -82,6 +83,7 @@ class PlaybackService {
         _vodRetries = 0;
         _afterVodStart();
         _ensureWatchers();
+        _startFreezeWatch();
         _refreshActiveTracks();
         final h = Uri.tryParse(_lastUrl ?? '')?.host ?? '';
         if (h.isNotEmpty) health?.ok(h);
@@ -442,6 +444,11 @@ class PlaybackService {
     subsVisible.value = on;
     await np.setProperty('sub-visibility', on ? 'yes' : 'no');
     if (mem.isNotEmpty) debugPrint('[tracks] using your saved choice for this show: $mem');
+    // Live buffer: hold a few seconds in reserve before starting a channel, so short
+    // provider stalls are absorbed instead of becoming skips. Movies don't need it.
+    final buf = item.kind == 'live' ? (Prefs.getInt('live.buffer') ?? 3) : 0;
+    await np.setProperty('cache-pause-initial', buf > 0 ? 'yes' : 'no');
+    await np.setProperty('cache-pause-wait', '${buf > 0 ? buf : 1}');
   }
 
   /// Track menu: pick an audio track (remembered for this show).
@@ -550,6 +557,117 @@ class PlaybackService {
     activeAudioId = await _prop(np, 'current-tracks/audio/id');
     activeSubId = await _prop(np, 'current-tracks/sub/id');
     trackTick.value++;
+  }
+
+  // ---------- Frozen-picture watchdog ----------
+  // Ad-supported channels splice in ads on different track IDs. If the player stays on a
+  // video track that stopped receiving data, the picture freezes while audio continues.
+  // Signal: mpv recalculates video-bitrate and audio-bitrate from the data arriving for the
+  // selected tracks (at keyframes). Video's number frozen 12s while audio's keeps changing
+  // = starved video track.
+  // Prefs 'watchdog.act' = true lets it recover (newest video track, then reopen).
+  // Off by default: it only logs, so we can prove it before it acts.
+
+  Timer? _freezeTimer;
+  String? _wdVbr;
+  String? _wdAbr;
+  DateTime _wdVideoMoved = DateTime.now();
+  DateTime _wdAudioMoved = DateTime.now();
+  int _wdStage = 0;
+  int? _wdItemId;
+  bool _wdNoticed = false;
+  final List<DateTime> _wdRecoveries = [];
+
+  void _startFreezeWatch() {
+    _freezeTimer ??= Timer.periodic(const Duration(seconds: 1), (_) => _freezeTick());
+  }
+
+  void _wdReset() {
+    _wdVbr = null;
+    _wdAbr = null;
+    _wdVideoMoved = DateTime.now();
+    _wdAudioMoved = DateTime.now();
+    _wdNoticed = false;
+  }
+
+  Future<void> _freezeTick() async {
+    final cur = current.value;
+    final st = player.state;
+    final np = player.platform;
+    if (cur == null || np is! NativePlayer || !st.playing || st.buffering || _reconnectPending) {
+      _wdReset();
+      return;
+    }
+    if (_wdItemId != cur.id) {
+      _wdItemId = cur.id;
+      _wdStage = 0;
+      _wdReset();
+      return;
+    }
+    if ((await _prop(np, 'current-tracks/video/id')).isEmpty) return; // radio / audio-only
+    if (await _prop(np, 'current-tracks/video/albumart') == 'yes') return; // still cover image
+    final vbr = await _prop(np, 'video-bitrate');
+    final abr = await _prop(np, 'audio-bitrate');
+    final now = DateTime.now();
+    if (vbr != _wdVbr) {
+      if (_wdVbr != null) _wdStage = 0;
+      _wdVbr = vbr;
+      _wdVideoMoved = now;
+      _wdNoticed = false;
+    }
+    if (abr != _wdAbr) {
+      _wdAbr = abr;
+      _wdAudioMoved = now;
+    }
+    final videoStale = now.difference(_wdVideoMoved) >= const Duration(seconds: 12);
+    final audioFresh = now.difference(_wdAudioMoved) < const Duration(seconds: 4);
+    if (!videoStale || !audioFresh || abr.isEmpty) return;
+
+    if (!Prefs.getBool('watchdog.act')) {
+      if (!_wdNoticed) {
+        _wdNoticed = true;
+        debugPrint('[playback] watchdog (watching only): picture may be frozen on ${cur.name} '
+            '(video data unchanged 12s while audio flows). If the picture really froze, tell Claude.');
+      }
+      return;
+    }
+
+    // Acting mode. Don't loop forever on a channel that's simply broken.
+    _wdRecoveries.removeWhere((t) => now.difference(t) > const Duration(minutes: 1));
+    if (_wdRecoveries.length >= 3) return;
+    if (_wdStage == 0) {
+      _wdStage = 1;
+      _wdRecoveries.add(now);
+      final n = int.tryParse(await _prop(np, 'track-list/count')) ?? 0;
+      var newest = -1;
+      for (var i = 0; i < n; i++) {
+        if (await _prop(np, 'track-list/$i/type') != 'video') continue;
+        if (await _prop(np, 'track-list/$i/albumart') == 'yes') continue;
+        final id = int.tryParse(await _prop(np, 'track-list/$i/id')) ?? -1;
+        if (id > newest) newest = id;
+      }
+      final curId = int.tryParse(await _prop(np, 'current-tracks/video/id')) ?? -1;
+      if (newest > 0 && newest != curId) {
+        debugPrint('[playback] picture froze while audio continued; switching to the newest video track ($curId -> $newest)');
+        await np.setProperty('vid', '$newest');
+        _wdReset();
+        return;
+      }
+    }
+    if (_wdStage == 1) {
+      _wdStage = 2;
+      _wdRecoveries.add(now);
+      _wdReset();
+      final url = _lastUrl;
+      if (url == null) return;
+      debugPrint('[playback] picture still frozen; reopening the stream');
+      final tpos = double.tryParse(await _prop(np, 'time-pos'));
+      if (cur.kind != 'live' && tpos != null && tpos > 5) {
+        await np.setProperty('start', '${tpos.floor()}');
+      }
+      await player.open(Media(TsRelay.wrap(url), httpHeaders: {'User-Agent': bmUserAgent}));
+      await player.play();
+    }
   }
 
   Future<void> _failoverOrGiveUp(Item item, String giveUpMsg) async {

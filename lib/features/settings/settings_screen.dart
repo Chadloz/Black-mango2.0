@@ -180,6 +180,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
           },
         )),
 
+        _section('LIVE TV BUFFER'),
+        _row(
+          'Buffer before a channel starts',
+          DropdownButton<int>(
+            value: Prefs.getInt('live.buffer') ?? 3,
+            underline: const SizedBox.shrink(),
+            items: const [
+              DropdownMenuItem(value: 0, child: Text('Off')),
+              DropdownMenuItem(value: 3, child: Text('3 seconds')),
+              DropdownMenuItem(value: 5, child: Text('5 seconds')),
+              DropdownMenuItem(value: 10, child: Text('10 seconds')),
+            ],
+            onChanged: (v) {
+              if (v == null) return;
+              Prefs.setInt('live.buffer', v);
+              setState(() {});
+            },
+          ),
+          sub: 'Holds a few seconds in reserve so short hiccups from the provider don\'t become skips. Channels take that much longer to start. Applies to the next channel you open.',
+        ),
         _section('LIVE TV AUDIO'),
         _row(
           'Dolby audio fix',

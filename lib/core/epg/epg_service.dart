@@ -33,6 +33,7 @@ class EpgService {
   final _queue = <Item>[];
   final _clients = <String, XtreamClient?>{};
   final _loggedFailures = <String>{};
+  final _backoffUntil = <String, DateTime>{}; // accounts that asked us to stop for a while
   int _active = 0;
   static const _maxActive = 3;
 
@@ -59,6 +60,8 @@ class EpgService {
   /// Ask for guide info for a row that's on screen. Cheap to call on every build.
   void request(Item i) {
     if (!_supported(i)) return;
+    final until = _backoffUntil[i.accountId];
+    if (until != null && DateTime.now().isBefore(until)) return;
     final k = _key(i);
     final c = _cache[k];
     if (c != null) {
@@ -135,6 +138,15 @@ class EpgService {
       if (list.isNotEmpty) changes.value++;
     } catch (e) {
       _cache[_key(i)] = (DateTime.now(), const []);
+      final msg = '$e';
+      // 429 = "too many requests": pause this account's guide for 30 minutes.
+      // 404 = this provider has no guide service at all: stop asking for the session.
+      final pause = msg.contains('429') ? const Duration(minutes: 30) : (msg.contains('404') ? const Duration(hours: 12) : null);
+      if (pause != null && !_backoffUntil.containsKey(i.accountId)) {
+        _backoffUntil[i.accountId] = DateTime.now().add(pause);
+        _queue.removeWhere((q) => q.accountId == i.accountId);
+        debugPrint('[epg] ${msg.contains('429') ? 'provider asked us to slow down' : 'provider has no guide'}; pausing guide requests for this account (${pause.inMinutes} min)');
+      }
       if (_loggedFailures.add(i.accountId)) debugPrint('[epg] guide request failed for ${i.name}: $e');
     }
   }
