@@ -109,7 +109,7 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 56,
+      height: 72, // logo above the wordmark
       color: BMColors.surface,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
@@ -120,7 +120,7 @@ class _TopBar extends StatelessWidget {
             icon: const Icon(Icons.menu, color: BMColors.text),
           ),
           const SizedBox(width: 8),
-          const Wordmark(size: 24),
+          const BrandStack(),
           const Spacer(),
           Text(
             section.toUpperCase(),

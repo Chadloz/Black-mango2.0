@@ -755,6 +755,15 @@ class $ItemsTable extends Items with TableInfo<$ItemsTable, Item> {
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _extraMeta = const VerificationMeta('extra');
+  @override
+  late final GeneratedColumn<String> extra = GeneratedColumn<String>(
+    'extra',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -771,6 +780,7 @@ class $ItemsTable extends Items with TableInfo<$ItemsTable, Item> {
     genre,
     country,
     language,
+    extra,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -873,6 +883,12 @@ class $ItemsTable extends Items with TableInfo<$ItemsTable, Item> {
         language.isAcceptableOrUnknown(data['language']!, _languageMeta),
       );
     }
+    if (data.containsKey('extra')) {
+      context.handle(
+        _extraMeta,
+        extra.isAcceptableOrUnknown(data['extra']!, _extraMeta),
+      );
+    }
     return context;
   }
 
@@ -938,6 +954,10 @@ class $ItemsTable extends Items with TableInfo<$ItemsTable, Item> {
         DriftSqlType.string,
         data['${effectivePrefix}language'],
       )!,
+      extra: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}extra'],
+      ),
     );
   }
 
@@ -962,6 +982,7 @@ class Item extends DataClass implements Insertable<Item> {
   final String genre;
   final String country;
   final String language;
+  final String? extra;
   const Item({
     required this.id,
     required this.accountId,
@@ -977,6 +998,7 @@ class Item extends DataClass implements Insertable<Item> {
     required this.genre,
     required this.country,
     required this.language,
+    this.extra,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -995,6 +1017,9 @@ class Item extends DataClass implements Insertable<Item> {
     map['genre'] = Variable<String>(genre);
     map['country'] = Variable<String>(country);
     map['language'] = Variable<String>(language);
+    if (!nullToAbsent || extra != null) {
+      map['extra'] = Variable<String>(extra);
+    }
     return map;
   }
 
@@ -1014,6 +1039,9 @@ class Item extends DataClass implements Insertable<Item> {
       genre: Value(genre),
       country: Value(country),
       language: Value(language),
+      extra: extra == null && nullToAbsent
+          ? const Value.absent()
+          : Value(extra),
     );
   }
 
@@ -1037,6 +1065,7 @@ class Item extends DataClass implements Insertable<Item> {
       genre: serializer.fromJson<String>(json['genre']),
       country: serializer.fromJson<String>(json['country']),
       language: serializer.fromJson<String>(json['language']),
+      extra: serializer.fromJson<String?>(json['extra']),
     );
   }
   @override
@@ -1057,6 +1086,7 @@ class Item extends DataClass implements Insertable<Item> {
       'genre': serializer.toJson<String>(genre),
       'country': serializer.toJson<String>(country),
       'language': serializer.toJson<String>(language),
+      'extra': serializer.toJson<String?>(extra),
     };
   }
 
@@ -1075,6 +1105,7 @@ class Item extends DataClass implements Insertable<Item> {
     String? genre,
     String? country,
     String? language,
+    Value<String?> extra = const Value.absent(),
   }) => Item(
     id: id ?? this.id,
     accountId: accountId ?? this.accountId,
@@ -1090,6 +1121,7 @@ class Item extends DataClass implements Insertable<Item> {
     genre: genre ?? this.genre,
     country: country ?? this.country,
     language: language ?? this.language,
+    extra: extra.present ? extra.value : this.extra,
   );
   Item copyWithCompanion(ItemsCompanion data) {
     return Item(
@@ -1107,6 +1139,7 @@ class Item extends DataClass implements Insertable<Item> {
       genre: data.genre.present ? data.genre.value : this.genre,
       country: data.country.present ? data.country.value : this.country,
       language: data.language.present ? data.language.value : this.language,
+      extra: data.extra.present ? data.extra.value : this.extra,
     );
   }
 
@@ -1126,7 +1159,8 @@ class Item extends DataClass implements Insertable<Item> {
           ..write('position: $position, ')
           ..write('genre: $genre, ')
           ..write('country: $country, ')
-          ..write('language: $language')
+          ..write('language: $language, ')
+          ..write('extra: $extra')
           ..write(')'))
         .toString();
   }
@@ -1147,6 +1181,7 @@ class Item extends DataClass implements Insertable<Item> {
     genre,
     country,
     language,
+    extra,
   );
   @override
   bool operator ==(Object other) =>
@@ -1165,7 +1200,8 @@ class Item extends DataClass implements Insertable<Item> {
           other.position == this.position &&
           other.genre == this.genre &&
           other.country == this.country &&
-          other.language == this.language);
+          other.language == this.language &&
+          other.extra == this.extra);
 }
 
 class ItemsCompanion extends UpdateCompanion<Item> {
@@ -1183,6 +1219,7 @@ class ItemsCompanion extends UpdateCompanion<Item> {
   final Value<String> genre;
   final Value<String> country;
   final Value<String> language;
+  final Value<String?> extra;
   const ItemsCompanion({
     this.id = const Value.absent(),
     this.accountId = const Value.absent(),
@@ -1198,6 +1235,7 @@ class ItemsCompanion extends UpdateCompanion<Item> {
     this.genre = const Value.absent(),
     this.country = const Value.absent(),
     this.language = const Value.absent(),
+    this.extra = const Value.absent(),
   });
   ItemsCompanion.insert({
     this.id = const Value.absent(),
@@ -1214,6 +1252,7 @@ class ItemsCompanion extends UpdateCompanion<Item> {
     this.genre = const Value.absent(),
     this.country = const Value.absent(),
     this.language = const Value.absent(),
+    this.extra = const Value.absent(),
   }) : accountId = Value(accountId),
        kind = Value(kind),
        name = Value(name),
@@ -1233,6 +1272,7 @@ class ItemsCompanion extends UpdateCompanion<Item> {
     Expression<String>? genre,
     Expression<String>? country,
     Expression<String>? language,
+    Expression<String>? extra,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1249,6 +1289,7 @@ class ItemsCompanion extends UpdateCompanion<Item> {
       if (genre != null) 'genre': genre,
       if (country != null) 'country': country,
       if (language != null) 'language': language,
+      if (extra != null) 'extra': extra,
     });
   }
 
@@ -1267,6 +1308,7 @@ class ItemsCompanion extends UpdateCompanion<Item> {
     Value<String>? genre,
     Value<String>? country,
     Value<String>? language,
+    Value<String?>? extra,
   }) {
     return ItemsCompanion(
       id: id ?? this.id,
@@ -1283,6 +1325,7 @@ class ItemsCompanion extends UpdateCompanion<Item> {
       genre: genre ?? this.genre,
       country: country ?? this.country,
       language: language ?? this.language,
+      extra: extra ?? this.extra,
     );
   }
 
@@ -1331,6 +1374,9 @@ class ItemsCompanion extends UpdateCompanion<Item> {
     if (language.present) {
       map['language'] = Variable<String>(language.value);
     }
+    if (extra.present) {
+      map['extra'] = Variable<String>(extra.value);
+    }
     return map;
   }
 
@@ -1350,7 +1396,8 @@ class ItemsCompanion extends UpdateCompanion<Item> {
           ..write('position: $position, ')
           ..write('genre: $genre, ')
           ..write('country: $country, ')
-          ..write('language: $language')
+          ..write('language: $language, ')
+          ..write('extra: $extra')
           ..write(')'))
         .toString();
   }
@@ -1917,6 +1964,15 @@ class $HistoryTable extends History with TableInfo<$HistoryTable, WatchEntry> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _extraMeta = const VerificationMeta('extra');
+  @override
+  late final GeneratedColumn<String> extra = GeneratedColumn<String>(
+    'extra',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     entryKey,
@@ -1930,6 +1986,7 @@ class $HistoryTable extends History with TableInfo<$HistoryTable, WatchEntry> {
     positionMs,
     durationMs,
     updatedAt,
+    extra,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2019,6 +2076,12 @@ class $HistoryTable extends History with TableInfo<$HistoryTable, WatchEntry> {
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('extra')) {
+      context.handle(
+        _extraMeta,
+        extra.isAcceptableOrUnknown(data['extra']!, _extraMeta),
+      );
+    }
     return context;
   }
 
@@ -2072,6 +2135,10 @@ class $HistoryTable extends History with TableInfo<$HistoryTable, WatchEntry> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      extra: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}extra'],
+      ),
     );
   }
 
@@ -2093,6 +2160,7 @@ class WatchEntry extends DataClass implements Insertable<WatchEntry> {
   final int positionMs;
   final int durationMs;
   final DateTime updatedAt;
+  final String? extra;
   const WatchEntry({
     required this.entryKey,
     required this.accountId,
@@ -2105,6 +2173,7 @@ class WatchEntry extends DataClass implements Insertable<WatchEntry> {
     required this.positionMs,
     required this.durationMs,
     required this.updatedAt,
+    this.extra,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2120,6 +2189,9 @@ class WatchEntry extends DataClass implements Insertable<WatchEntry> {
     map['position_ms'] = Variable<int>(positionMs);
     map['duration_ms'] = Variable<int>(durationMs);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || extra != null) {
+      map['extra'] = Variable<String>(extra);
+    }
     return map;
   }
 
@@ -2136,6 +2208,9 @@ class WatchEntry extends DataClass implements Insertable<WatchEntry> {
       positionMs: Value(positionMs),
       durationMs: Value(durationMs),
       updatedAt: Value(updatedAt),
+      extra: extra == null && nullToAbsent
+          ? const Value.absent()
+          : Value(extra),
     );
   }
 
@@ -2156,6 +2231,7 @@ class WatchEntry extends DataClass implements Insertable<WatchEntry> {
       positionMs: serializer.fromJson<int>(json['positionMs']),
       durationMs: serializer.fromJson<int>(json['durationMs']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      extra: serializer.fromJson<String?>(json['extra']),
     );
   }
   @override
@@ -2173,6 +2249,7 @@ class WatchEntry extends DataClass implements Insertable<WatchEntry> {
       'positionMs': serializer.toJson<int>(positionMs),
       'durationMs': serializer.toJson<int>(durationMs),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'extra': serializer.toJson<String?>(extra),
     };
   }
 
@@ -2188,6 +2265,7 @@ class WatchEntry extends DataClass implements Insertable<WatchEntry> {
     int? positionMs,
     int? durationMs,
     DateTime? updatedAt,
+    Value<String?> extra = const Value.absent(),
   }) => WatchEntry(
     entryKey: entryKey ?? this.entryKey,
     accountId: accountId ?? this.accountId,
@@ -2200,6 +2278,7 @@ class WatchEntry extends DataClass implements Insertable<WatchEntry> {
     positionMs: positionMs ?? this.positionMs,
     durationMs: durationMs ?? this.durationMs,
     updatedAt: updatedAt ?? this.updatedAt,
+    extra: extra.present ? extra.value : this.extra,
   );
   WatchEntry copyWithCompanion(HistoryCompanion data) {
     return WatchEntry(
@@ -2218,6 +2297,7 @@ class WatchEntry extends DataClass implements Insertable<WatchEntry> {
           ? data.durationMs.value
           : this.durationMs,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      extra: data.extra.present ? data.extra.value : this.extra,
     );
   }
 
@@ -2234,7 +2314,8 @@ class WatchEntry extends DataClass implements Insertable<WatchEntry> {
           ..write('url: $url, ')
           ..write('positionMs: $positionMs, ')
           ..write('durationMs: $durationMs, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('extra: $extra')
           ..write(')'))
         .toString();
   }
@@ -2252,6 +2333,7 @@ class WatchEntry extends DataClass implements Insertable<WatchEntry> {
     positionMs,
     durationMs,
     updatedAt,
+    extra,
   );
   @override
   bool operator ==(Object other) =>
@@ -2267,7 +2349,8 @@ class WatchEntry extends DataClass implements Insertable<WatchEntry> {
           other.url == this.url &&
           other.positionMs == this.positionMs &&
           other.durationMs == this.durationMs &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.extra == this.extra);
 }
 
 class HistoryCompanion extends UpdateCompanion<WatchEntry> {
@@ -2282,6 +2365,7 @@ class HistoryCompanion extends UpdateCompanion<WatchEntry> {
   final Value<int> positionMs;
   final Value<int> durationMs;
   final Value<DateTime> updatedAt;
+  final Value<String?> extra;
   final Value<int> rowid;
   const HistoryCompanion({
     this.entryKey = const Value.absent(),
@@ -2295,6 +2379,7 @@ class HistoryCompanion extends UpdateCompanion<WatchEntry> {
     this.positionMs = const Value.absent(),
     this.durationMs = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.extra = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   HistoryCompanion.insert({
@@ -2309,6 +2394,7 @@ class HistoryCompanion extends UpdateCompanion<WatchEntry> {
     this.positionMs = const Value.absent(),
     this.durationMs = const Value.absent(),
     required DateTime updatedAt,
+    this.extra = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : entryKey = Value(entryKey),
        accountId = Value(accountId),
@@ -2327,6 +2413,7 @@ class HistoryCompanion extends UpdateCompanion<WatchEntry> {
     Expression<int>? positionMs,
     Expression<int>? durationMs,
     Expression<DateTime>? updatedAt,
+    Expression<String>? extra,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2341,6 +2428,7 @@ class HistoryCompanion extends UpdateCompanion<WatchEntry> {
       if (positionMs != null) 'position_ms': positionMs,
       if (durationMs != null) 'duration_ms': durationMs,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (extra != null) 'extra': extra,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2357,6 +2445,7 @@ class HistoryCompanion extends UpdateCompanion<WatchEntry> {
     Value<int>? positionMs,
     Value<int>? durationMs,
     Value<DateTime>? updatedAt,
+    Value<String?>? extra,
     Value<int>? rowid,
   }) {
     return HistoryCompanion(
@@ -2371,6 +2460,7 @@ class HistoryCompanion extends UpdateCompanion<WatchEntry> {
       positionMs: positionMs ?? this.positionMs,
       durationMs: durationMs ?? this.durationMs,
       updatedAt: updatedAt ?? this.updatedAt,
+      extra: extra ?? this.extra,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2411,6 +2501,9 @@ class HistoryCompanion extends UpdateCompanion<WatchEntry> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (extra.present) {
+      map['extra'] = Variable<String>(extra.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2431,6 +2524,7 @@ class HistoryCompanion extends UpdateCompanion<WatchEntry> {
           ..write('positionMs: $positionMs, ')
           ..write('durationMs: $durationMs, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('extra: $extra, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2781,6 +2875,7 @@ typedef $$ItemsTableCreateCompanionBuilder = ItemsCompanion Function({
   Value<String> genre,
   Value<String> country,
   Value<String> language,
+  Value<String?> extra,
 });
 typedef $$ItemsTableUpdateCompanionBuilder = ItemsCompanion Function({
   Value<int> id,
@@ -2797,6 +2892,7 @@ typedef $$ItemsTableUpdateCompanionBuilder = ItemsCompanion Function({
   Value<String> genre,
   Value<String> country,
   Value<String> language,
+  Value<String?> extra,
 });
 
 class $$ItemsTableFilterComposer extends Composer<_$AppDatabase, $ItemsTable> {
@@ -2874,6 +2970,11 @@ class $$ItemsTableFilterComposer extends Composer<_$AppDatabase, $ItemsTable> {
 
   ColumnFilters<String> get language => $composableBuilder(
     column: $table.language,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get extra => $composableBuilder(
+    column: $table.extra,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2956,6 +3057,11 @@ class $$ItemsTableOrderingComposer
     column: $table.language,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get extra => $composableBuilder(
+    column: $table.extra,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ItemsTableAnnotationComposer
@@ -3008,6 +3114,9 @@ class $$ItemsTableAnnotationComposer
 
   GeneratedColumn<String> get language =>
       $composableBuilder(column: $table.language, builder: (column) => column);
+
+  GeneratedColumn<String> get extra =>
+      $composableBuilder(column: $table.extra, builder: (column) => column);
 }
 
 class $$ItemsTableTableManager
@@ -3052,6 +3161,7 @@ class $$ItemsTableTableManager
                 Value<String> genre = const Value.absent(),
                 Value<String> country = const Value.absent(),
                 Value<String> language = const Value.absent(),
+                Value<String?> extra = const Value.absent(),
               }) => ItemsCompanion(
                 id: id,
                 accountId: accountId,
@@ -3067,6 +3177,7 @@ class $$ItemsTableTableManager
                 genre: genre,
                 country: country,
                 language: language,
+                extra: extra,
               ),
           createCompanionCallback:
               ({
@@ -3084,6 +3195,7 @@ class $$ItemsTableTableManager
                 Value<String> genre = const Value.absent(),
                 Value<String> country = const Value.absent(),
                 Value<String> language = const Value.absent(),
+                Value<String?> extra = const Value.absent(),
               }) => ItemsCompanion.insert(
                 id: id,
                 accountId: accountId,
@@ -3099,6 +3211,7 @@ class $$ItemsTableTableManager
                 genre: genre,
                 country: country,
                 language: language,
+                extra: extra,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -3376,6 +3489,7 @@ typedef $$HistoryTableCreateCompanionBuilder = HistoryCompanion Function({
   Value<int> positionMs,
   Value<int> durationMs,
   required DateTime updatedAt,
+  Value<String?> extra,
   Value<int> rowid,
 });
 typedef $$HistoryTableUpdateCompanionBuilder = HistoryCompanion Function({
@@ -3390,6 +3504,7 @@ typedef $$HistoryTableUpdateCompanionBuilder = HistoryCompanion Function({
   Value<int> positionMs,
   Value<int> durationMs,
   Value<DateTime> updatedAt,
+  Value<String?> extra,
   Value<int> rowid,
 });
 
@@ -3454,6 +3569,11 @@ class $$HistoryTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get extra => $composableBuilder(
+    column: $table.extra,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3521,6 +3641,11 @@ class $$HistoryTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get extra => $composableBuilder(
+    column: $table.extra,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$HistoryTableAnnotationComposer
@@ -3568,6 +3693,9 @@ class $$HistoryTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get extra =>
+      $composableBuilder(column: $table.extra, builder: (column) => column);
 }
 
 class $$HistoryTableTableManager
@@ -3612,6 +3740,7 @@ class $$HistoryTableTableManager
                 Value<int> positionMs = const Value.absent(),
                 Value<int> durationMs = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<String?> extra = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HistoryCompanion(
                 entryKey: entryKey,
@@ -3625,6 +3754,7 @@ class $$HistoryTableTableManager
                 positionMs: positionMs,
                 durationMs: durationMs,
                 updatedAt: updatedAt,
+                extra: extra,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3640,6 +3770,7 @@ class $$HistoryTableTableManager
                 Value<int> positionMs = const Value.absent(),
                 Value<int> durationMs = const Value.absent(),
                 required DateTime updatedAt,
+                Value<String?> extra = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HistoryCompanion.insert(
                 entryKey: entryKey,
@@ -3653,6 +3784,7 @@ class $$HistoryTableTableManager
                 positionMs: positionMs,
                 durationMs: durationMs,
                 updatedAt: updatedAt,
+                extra: extra,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

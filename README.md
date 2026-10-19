@@ -14,6 +14,10 @@ Early development. Not ready for daily use yet. The 1.x Electron app lives at gi
 - media_kit (libmpv + FFmpeg) for playback
 - Rust only where Dart isn't fast enough
 
+## Credits
+
+Stalker portal support is informed by, and partly adapted from, [stalkerhek](https://github.com/erkexzcx/stalkerhek) by erkexzcx and its fork by [kidpoleon](https://github.com/kidpoleon/stalkerhek). Both are GPL-3.0.
+
 ## License
 
 GPL-3.0. See LICENSE.

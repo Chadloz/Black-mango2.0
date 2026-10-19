@@ -41,6 +41,7 @@ class Items extends Table {
   TextColumn get genre => text().withDefault(const Constant(''))();
   TextColumn get country => text().withDefault(const Constant(''))();
   TextColumn get language => text().withDefault(const Constant(''))();
+  TextColumn get extra => text().nullable()(); // provider-specific play info (Stalker: {"cmd": ...})
 }
 
 /// Starred channels, movies, and shows. Keyed by the provider's stream ID
@@ -70,6 +71,7 @@ class History extends Table {
   IntColumn get positionMs => integer().withDefault(const Constant(0))();
   IntColumn get durationMs => integer().withDefault(const Constant(0))();
   DateTimeColumn get updatedAt => dateTime()();
+  TextColumn get extra => text().nullable()(); // same as Items.extra, so history can replay Stalker titles
 
   @override
   Set<Column> get primaryKey => {entryKey};
@@ -80,7 +82,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'black_mango'));
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -108,6 +110,13 @@ class AppDatabase extends _$AppDatabase {
           if (from < 5) {
             final t = await customSelect("SELECT name FROM sqlite_master WHERE type='table' AND name='history'").get();
             if (t.isEmpty) await m.createTable(history);
+          }
+          // v6 adds "extra" (provider-specific play info) to items and history. Only adds what's missing.
+          if (from < 6) {
+            Future<Set<String>> cols(String table) async =>
+                (await customSelect("PRAGMA table_info('$table')").get()).map((r) => r.read<String>('name')).toSet();
+            if (!(await cols('items')).contains('extra')) await m.addColumn(items, items.extra);
+            if (!(await cols('history')).contains('extra')) await m.addColumn(history, history.extra);
           }
         },
       );

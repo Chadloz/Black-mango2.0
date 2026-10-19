@@ -326,7 +326,7 @@ class _LiveScreenState extends State<LiveScreen> {
             children: [
               SizedBox(height: playerH, child: _PlayerArea(item: cur, acctNames: _acctNames)),
               const Divider(height: 1),
-              _toolbar(compact: false),
+              _toolbar(compact: box.maxWidth < 600),
               _pills(),
               countLine,
               Expanded(child: _list(cur)),

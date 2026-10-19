@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../app/theme.dart';
+import '../../core/widgets/wordmark.dart';
 import '../../core/prefs.dart';
 import '../../core/services.dart';
 import '../../core/app_log.dart';
@@ -379,10 +380,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
 
         _section('ABOUT'),
-        const Text('Black Mango 2.0 · development build', style: TextStyle(color: BMColors.text)),
-        const SizedBox(height: 4),
-        const Text('Free and open source (GPL-3.0) · github.com/Chadloz/Black-mango2.0',
-            style: TextStyle(color: BMColors.dim, fontSize: 13)),
+        const Row(
+          children: [
+            BrandLogo(height: 40),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Black Mango 2.0 · development build', style: TextStyle(color: BMColors.text)),
+                  SizedBox(height: 4),
+                  Text('Free and open source (GPL-3.0) · github.com/Chadloz/Black-mango2.0',
+                      style: TextStyle(color: BMColors.dim, fontSize: 13)),
+                ],
+              ),
+            ),
+          ],
+        ),
         _row(
           'App updates',
           const OutlinedButton(onPressed: null, child: Text('Check for updates')),

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../storage/database.dart';
 import '../accounts/account_repository.dart';
 import '../providers/xtream.dart';
+import '../providers/stalker.dart';
 
 class EpgEntry {
   final String title;
@@ -19,7 +20,7 @@ String epgTime(DateTime t) {
   return '$h:$m ${t.hour < 12 ? 'AM' : 'PM'}';
 }
 
-/// Now / next for Xtream live channels, fetched only for rows on screen.
+/// Now / next for Xtream and Stalker live channels, fetched only for rows on screen.
 /// Light by design: tiny per-channel requests, max 3 at a time, cached in memory.
 class EpgService {
   final AccountRepository accounts;
@@ -31,7 +32,7 @@ class EpgService {
   final _cache = <String, (DateTime, List<EpgEntry>)>{};
   final _inFlight = <String>{};
   final _queue = <Item>[];
-  final _clients = <String, XtreamClient?>{};
+  final _fetchers = <String, Future<List<EpgEntry>> Function(String streamId)?>{};
   final _loggedFailures = <String>{};
   final _backoffUntil = <String, DateTime>{}; // accounts that asked us to stop for a while
   int _active = 0;
@@ -90,15 +91,36 @@ class EpgService {
     }
   }
 
-  Future<XtreamClient?> _client(String accountId) async {
-    if (_clients.containsKey(accountId)) return _clients[accountId];
+  /// How to get now/next for an account's channels, or null if it has no guide.
+  Future<Future<List<EpgEntry>> Function(String)?> _fetcher(String accountId) async {
+    if (_fetchers.containsKey(accountId)) return _fetchers[accountId];
     final a = await accounts.get(accountId);
-    XtreamClient? c;
+    Future<List<EpgEntry>> Function(String)? f;
     if (a != null && a.type == 'xtream') {
-      c = XtreamClient(a.server, a.username, await accounts.password(a.id) ?? '');
+      final x = XtreamClient(a.server, a.username, await accounts.password(a.id) ?? '');
+      f = (id) async => _entriesFrom(await x.shortEpg(id, limit: 3), 'title', decode: true);
+    } else if (a != null && a.type == 'stalker') {
+      final s = StalkerHub.of(a);
+      f = (id) async => _entriesFrom(await s.shortEpg(id), 'name', decode: false);
     }
-    _clients[accountId] = c;
-    return c;
+    _fetchers[accountId] = f;
+    return f;
+  }
+
+  List<EpgEntry> _entriesFrom(List<Map> raw, String titleKey, {required bool decode}) {
+    final list = <EpgEntry>[];
+    for (final m in raw) {
+      final s = int.tryParse('${m['start_timestamp'] ?? ''}');
+      final e = int.tryParse('${m['stop_timestamp'] ?? ''}');
+      if (s == null || e == null) continue;
+      final title = '${m[titleKey] ?? ''}';
+      list.add(EpgEntry(
+        decode ? _decode(title) : title.trim(),
+        DateTime.fromMillisecondsSinceEpoch(s * 1000),
+        DateTime.fromMillisecondsSinceEpoch(e * 1000),
+      ));
+    }
+    return list;
   }
 
   static final _b64 = RegExp(r'^[A-Za-z0-9+/]+={0,2}$');
@@ -116,23 +138,12 @@ class EpgService {
 
   Future<void> _fetch(Item i) async {
     try {
-      final x = await _client(i.accountId);
-      if (x == null) {
+      final f = await _fetcher(i.accountId);
+      if (f == null) {
         _cache[_key(i)] = (DateTime.now(), const []);
         return;
       }
-      final raw = await x.shortEpg(i.streamId, limit: 3);
-      final list = <EpgEntry>[];
-      for (final m in raw) {
-        final s = int.tryParse('${m['start_timestamp'] ?? ''}');
-        final e = int.tryParse('${m['stop_timestamp'] ?? ''}');
-        if (s == null || e == null) continue;
-        list.add(EpgEntry(
-          _decode('${m['title'] ?? ''}'),
-          DateTime.fromMillisecondsSinceEpoch(s * 1000),
-          DateTime.fromMillisecondsSinceEpoch(e * 1000),
-        ));
-      }
+      final list = await f(i.streamId);
       list.sort((a, b) => a.start.compareTo(b.start));
       _cache[_key(i)] = (DateTime.now(), list);
       if (list.isNotEmpty) changes.value++;

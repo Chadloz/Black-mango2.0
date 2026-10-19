@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/services.dart';
 import '../../core/accounts/account_parser.dart';
+import '../../core/providers/stalker.dart';
 
 /// Add Account: quick paste on top, the form underneath.
 /// Paste fills the form; you can edit anything before saving.
@@ -20,6 +21,8 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   final _mac = TextEditingController();
   final _url = TextEditingController();
   final _name = TextEditingController();
+  final _serial = TextEditingController(); // Stalker, optional: made from the MAC when blank
+  final _deviceId = TextEditingController(); // Stalker, optional: made from the MAC when blank
   String _type = 'xtream';
   bool _showPass = false;
   bool _saving = false;
@@ -31,7 +34,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
 
   @override
   void dispose() {
-    for (final c in [_paste, _server, _user, _pass, _mac, _url, _name]) {
+    for (final c in [_paste, _server, _user, _pass, _mac, _url, _name, _serial, _deviceId]) {
       c.dispose();
     }
     super.dispose();
@@ -68,6 +71,9 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
         username: _user.text.trim(),
         password: _pass.text,
         url: _url.text.trim(),
+        mac: _mac.text.trim(),
+        serial: _serial.text.trim(),
+        deviceId: _deviceId.text.trim(),
       );
       if (!mounted) return;
       setState(() {
@@ -114,15 +120,21 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
         server: displayServer,
         username: _type == 'xtream' ? _user.text.trim() : '',
         password: _type == 'xtream' ? _pass.text : '',
-        mac: _type == 'stalker' ? _mac.text.trim().toUpperCase() : '',
+        mac: _type == 'stalker' ? StalkerIdentity.normMac(_mac.text) : '',
         url: _type == 'm3u' ? url : '',
       );
+      if (_type == 'stalker') {
+        await StalkerSettings.write(id, {
+          if (_serial.text.trim().isNotEmpty) 'serial': _serial.text.trim(),
+          if (_deviceId.text.trim().isNotEmpty) 'deviceId': _deviceId.text.trim(),
+        });
+      }
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
       messenger.showSnackBar(SnackBar(content: Text('Saved "$name". Loading...')));
       final account = await Services.accounts.get(id);
-      if (account != null && account.type != 'stalker') {
+      if (account != null) {
         Services.catalog.load(account).then(
           (msg) => messenger.showSnackBar(SnackBar(content: Text('$name: $msg'))),
           onError: (e) => messenger.showSnackBar(SnackBar(content: Text('$name: load failed: $e'))),
@@ -161,7 +173,12 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
           TextField(controller: _server, decoration: _dec('http://portal.com:8080/c/')),
           const SizedBox(height: 12),
           const _Label('MAC ADDRESS'),
-          TextField(controller: _mac, decoration: _dec('00:1A:79:XX:XX:XX')),
+          TextField(
+            controller: _mac,
+            decoration: _dec('00:1A:79:XX:XX:XX'),
+            onChanged: (_) => setState(() {}), // refreshes the Advanced hints
+          ),
+          _advanced(),
         ];
       case 'm3u':
         return [
@@ -210,6 +227,34 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
           ),
         ];
     }
+  }
+
+  /// Stalker extras, tucked away. Blank fields are made from the MAC, shown as the hint.
+  Widget _advanced() {
+    final mac = _mac.text.trim();
+    final validMac = RegExp(r'^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$').hasMatch(mac);
+    final autoSerial = validMac ? StalkerIdentity.autoSerial(mac) : 'Made from the MAC';
+    final autoDevice = validMac ? StalkerIdentity.autoDeviceId(mac) : 'Made from the MAC';
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 4),
+        expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+        title: const Text('Advanced', style: TextStyle(fontSize: 13, color: BMColors.dim)),
+        subtitle: const Text(
+          'Serial and device ID are made from the MAC. Only fill these in if your provider gave you specific ones.',
+          style: TextStyle(fontSize: 11, color: BMColors.dim),
+        ),
+        children: [
+          const _Label('SERIAL NUMBER'),
+          TextField(controller: _serial, decoration: _dec(autoSerial)),
+          const SizedBox(height: 12),
+          const _Label('DEVICE ID'),
+          TextField(controller: _deviceId, decoration: _dec(autoDevice)),
+        ],
+      ),
+    );
   }
 
   @override

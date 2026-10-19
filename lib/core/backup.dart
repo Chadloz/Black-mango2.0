@@ -150,7 +150,7 @@ class Backup {
   static Future<void> reloadAll(List<Account> accts) async {
     for (final a in accts) {
       final fresh = await Services.accounts.get(a.id);
-      if (fresh == null || fresh.type == 'stalker') continue;
+      if (fresh == null) continue;
       try {
         await Services.catalog.load(fresh);
       } catch (e) {

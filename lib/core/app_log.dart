@@ -1,12 +1,12 @@
 import 'package:flutter/foundation.dart';
 
 /// Keeps the last 3,000 log lines in memory so they can be copied from Settings.
-/// Credentials in stream links are hidden as they're recorded.
+/// Credentials in stream links (and Stalker MACs and tokens) are hidden as they're recorded.
 class AppLog {
   static const _max = 3000;
   static final _lines = <String>[];
   static final _pathCreds = RegExp(r'(/(?:live|movie|series)/)[^/\s]+/[^/\s]+/');
-  static final _queryCreds = RegExp(r'((?:username|password)=)[^&\s]+', caseSensitive: false);
+  static final _queryCreds = RegExp(r'((?:username|password|mac|play_token|token)=)[^&\s;]+', caseSensitive: false);
 
   static void start() {
     final original = debugPrint;

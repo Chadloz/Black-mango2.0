@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:isolate';
 import 'dart:math';
 import 'package:drift/drift.dart';
@@ -7,6 +8,7 @@ import '../accounts/account_repository.dart';
 import '../net/fetch.dart';
 import '../providers/xtream.dart';
 import '../providers/m3u.dart';
+import '../providers/stalker.dart';
 import 'classifier.dart';
 import 'details.dart';
 import 'name_match.dart';
@@ -40,6 +42,35 @@ List<ItemsCompanion> buildXtreamRows(String accountId, String kind, List<Map> li
   return rows;
 }
 
+/// Builds live channel rows from a Stalker channel list. Top-level for the background worker.
+/// The portal's command for each channel is kept in extra; play links are made at play time.
+List<ItemsCompanion> buildStalkerLiveRows(String accountId, String api, List<Map> list, Map<String, String> genres) {
+  final rows = <ItemsCompanion>[];
+  for (var i = 0; i < list.length; i++) {
+    final m = list[i];
+    final name = '${m['name'] ?? ''}'.trim();
+    final cmd = '${m['cmd'] ?? ''}'.trim();
+    if (name.isEmpty || cmd.isEmpty) continue;
+    final category = genres['${m['tv_genre_id'] ?? ''}'] ?? '';
+    final c = classify(category, name);
+    rows.add(ItemsCompanion.insert(
+      accountId: accountId,
+      kind: 'live',
+      name: name,
+      nameLower: name.toLowerCase(),
+      category: Value(category),
+      logo: Value(stalkerLogo('${m['logo'] ?? ''}', api)),
+      streamId: Value('${m['id'] ?? ''}'),
+      position: Value(i),
+      genre: Value(c.genre),
+      country: Value(c.country),
+      language: Value(c.language),
+      extra: Value(jsonEncode({'cmd': cmd})),
+    ));
+  }
+  return rows;
+}
+
 /// Parses an M3U playlist into database rows. Top-level for the background worker.
 List<ItemsCompanion> buildM3uRows(String accountId, String text) {
   final entries = parseM3u(text);
@@ -64,6 +95,18 @@ List<ItemsCompanion> buildM3uRows(String accountId, String text) {
   }
   return rows;
 }
+
+// Background workers. Top-level on purpose: a closure made inside a CatalogService method
+// can carry the whole service (and its open database) along with it, and that can't be
+// sent to another isolate ("object is unsendable"). Here the closure holds only its inputs.
+Future<List<ItemsCompanion>> _xtreamRowsInBackground(String id, String kind, List<Map> list, Map<String, String> cats,
+        String idKey, String logoKey, String? extKey) =>
+    Isolate.run(() => buildXtreamRows(id, kind, list, cats, idKey, logoKey, extKey));
+
+Future<List<ItemsCompanion>> _m3uRowsInBackground(String id, String text) => Isolate.run(() => buildM3uRows(id, text));
+
+Future<List<ItemsCompanion>> _stalkerRowsInBackground(String id, String api, List<Map> list, Map<String, String> genres) =>
+    Isolate.run(() => buildStalkerLiveRows(id, api, list, genres));
 
 /// Loads an account's channels, movies, and shows, and answers list queries.
 class CatalogService {
@@ -183,7 +226,21 @@ class CatalogService {
     String username = '',
     String password = '',
     String url = '',
+    String mac = '',
+    String serial = '',
+    String deviceId = '',
   }) async {
+    if (type == 'stalker') {
+      if (server.isEmpty || mac.trim().isEmpty) throw BMError('Enter the portal URL and MAC address.');
+      final c = StalkerClient(server, StalkerIdentity(mac, serial: serial, deviceId: deviceId));
+      await c.ensure();
+      final exp = await c.expiry();
+      final where = Uri.parse(c.api!).path;
+      final expText = exp == null
+          ? 'no expiration listed'
+          : 'expires ${DateTime.fromMillisecondsSinceEpoch(exp * 1000).toLocal().toString().split(' ').first}';
+      return 'Connected through $where, $expText.';
+    }
     if (type == 'xtream') {
       final r = await XtreamClient(server, username, password).test();
       if (!r.ok) throw BMError(r.message);
@@ -195,7 +252,7 @@ class CatalogService {
       if (n == 0) throw BMError('Downloaded, but it does not look like an M3U playlist.');
       return 'Playlist OK: $n entries.';
     }
-    throw BMError('Testing Stalker portals is coming in a later step.');
+    throw BMError('Unknown account type.');
   }
 
   /// Downloads everything for an account and replaces what was stored.
@@ -205,6 +262,7 @@ class CatalogService {
       _set(a.id, 'Starting...');
       final rows = <ItemsCompanion>[];
       final id = a.id;
+      Set<String>? onlyKinds; // Stalker: reload live channels only; cached movies and shows stay
       if (a.type == 'xtream') {
         final pass = await accounts.password(a.id) ?? '';
         final x = XtreamClient(a.server, a.username, pass);
@@ -215,32 +273,49 @@ class CatalogService {
         final live = await x.list('get_live_streams');
         final liveCats = await x.categories('get_live_categories');
         _set(id, 'Sorting live channels...');
-        rows.addAll(await Isolate.run(() => buildXtreamRows(id, 'live', live, liveCats, 'stream_id', 'stream_icon', null)));
+        rows.addAll(await _xtreamRowsInBackground(id, 'live', live, liveCats, 'stream_id', 'stream_icon', null));
 
         _set(id, 'Loading movies...');
         final vod = await x.list('get_vod_streams');
         final vodCats = await x.categories('get_vod_categories');
         _set(id, 'Sorting movies...');
-        rows.addAll(await Isolate.run(
-            () => buildXtreamRows(id, 'movie', vod, vodCats, 'stream_id', 'stream_icon', 'container_extension')));
+        rows.addAll(await _xtreamRowsInBackground(id, 'movie', vod, vodCats, 'stream_id', 'stream_icon', 'container_extension'));
 
         _set(id, 'Loading shows...');
         final series = await x.list('get_series');
         final seriesCats = await x.categories('get_series_categories');
         _set(id, 'Sorting shows...');
-        rows.addAll(await Isolate.run(() => buildXtreamRows(id, 'series', series, seriesCats, 'series_id', 'cover', null)));
+        rows.addAll(await _xtreamRowsInBackground(id, 'series', series, seriesCats, 'series_id', 'cover', null));
       } else if (a.type == 'm3u') {
         final url = await accounts.playlistUrl(a.id) ?? '';
         if (url.isEmpty) throw BMError('No playlist link saved for this account.');
         _set(id, 'Downloading playlist...');
         final text = await fetchText(Uri.parse(url), timeout: const Duration(minutes: 3));
         _set(id, 'Reading playlist...');
-        rows.addAll(await Isolate.run(() => buildM3uRows(id, text)));
+        rows.addAll(await _m3uRowsInBackground(id, text));
+      } else if (a.type == 'stalker') {
+        final s = StalkerHub.of(a);
+        _set(id, 'Connecting to the portal...');
+        await s.ensure();
+        final exp = await s.expiry();
+        if (exp != null && exp > 0) Prefs.setInt('acct.${a.id}.exp', exp);
+        _set(id, 'Loading live channels...');
+        final genres = await s.liveGenres();
+        final list = await s.liveChannels(progress: (done, total) => _set(id, 'Loading live channels ($done/$total)...'));
+        _set(id, 'Sorting live channels...');
+        final api = s.api ?? '';
+        rows.addAll(await _stalkerRowsInBackground(id, api, list, genres));
+        onlyKinds = {'live'};
       } else {
-        throw BMError('Loading Stalker portals is coming in a later step.');
+        throw BMError('Unknown account type.');
       }
       _set(id, 'Saving ${rows.length} items...');
-      await _replace(id, rows);
+      await _replace(id, rows, kinds: onlyKinds);
+      if (onlyKinds != null) {
+        final liveN = await _count(id, 'live');
+        await accounts.updateCounts(id, liveN, await _count(id, 'movie'), await _count(id, 'series'));
+        return 'Loaded $liveN live channels. Movies and shows load by category when you open them.';
+      }
       final live = rows.where((r) => r.kind.value == 'live').length;
       final movies = rows.where((r) => r.kind.value == 'movie').length;
       final shows = rows.where((r) => r.kind.value == 'series').length;
@@ -251,9 +326,21 @@ class CatalogService {
     }
   }
 
-  Future<void> _replace(String accountId, List<ItemsCompanion> rows) async {
+  Future<int> _count(String accountId, String kind) async {
+    final n = db.items.id.count();
+    final q = db.selectOnly(db.items)
+      ..addColumns([n])
+      ..where(db.items.accountId.equals(accountId) & db.items.kind.equals(kind));
+    return (await q.getSingle()).read(n) ?? 0;
+  }
+
+  /// Replaces an account's stored items (only the given kinds, if set).
+  Future<void> _replace(String accountId, List<ItemsCompanion> rows, {Set<String>? kinds}) async {
+    final only = kinds;
     await db.transaction(() async {
-      await (db.delete(db.items)..where((t) => t.accountId.equals(accountId))).go();
+      await (db.delete(db.items)
+            ..where((t) => only == null ? t.accountId.equals(accountId) : (t.accountId.equals(accountId) & t.kind.isIn(only))))
+          .go();
       for (var i = 0; i < rows.length; i += 5000) {
         final chunk = rows.sublist(i, min(i + 5000, rows.length));
         await db.batch((b) => b.insertAll(db.items, chunk));

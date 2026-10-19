@@ -44,6 +44,7 @@ class Session {
         'genre': i.genre,
         'country': i.country,
         'language': i.language,
+        'extra': i.extra,
       }),
     );
   }
@@ -76,6 +77,7 @@ class Session {
         genre: s('genre'),
         country: s('country'),
         language: s('language'),
+        extra: m['extra'] as String?,
       );
       if (await Services.accounts.get(item.accountId) == null) return;
       await Services.playback.play(item, autoplay: mode == 'resume' && item.kind == 'live');

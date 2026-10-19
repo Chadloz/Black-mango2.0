@@ -4,6 +4,7 @@ import '../../app/theme.dart';
 import '../../app/nav.dart';
 import '../../core/services.dart';
 import '../../core/storage/database.dart';
+import '../../core/widgets/wordmark.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -84,6 +85,8 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            const BrandLogo(height: 140),
+            const SizedBox(height: 16),
             const Text('Welcome to Black Mango', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: BMColors.text)),
             const SizedBox(height: 8),
             const Text('Add an account or a free channel pack to get started.', style: TextStyle(color: BMColors.dim)),

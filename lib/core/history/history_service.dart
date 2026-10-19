@@ -19,6 +19,7 @@ class HistoryService {
           streamId: Value(item.streamId),
           ext: Value(item.ext),
           url: Value(item.url),
+          extra: Value(item.extra),
           positionMs: Value(position.inMilliseconds),
           durationMs: Value(duration.inMilliseconds),
           updatedAt: DateTime.now(),
@@ -68,5 +69,6 @@ class HistoryService {
         genre: '',
         country: '',
         language: '',
+        extra: e.extra,
       );
 }

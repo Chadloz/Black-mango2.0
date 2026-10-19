@@ -193,7 +193,8 @@ class _PosterBrowserState extends State<PosterBrowser> {
           final playing = cur != null && widget.playKinds.contains(cur.kind);
           final sel = _selected;
           final hasPane = playing || sel != null;
-          final browser = _browser(compact: hasPane, cur: cur);
+          // Narrow space (small window, mini player): stack the toolbar so nothing overflows.
+          final browser = _browser(compact: hasPane || box.maxWidth < 600, cur: cur);
           if (!hasPane) return browser;
           final Widget panel;
           if (playing && (_showVideo || sel == null)) {

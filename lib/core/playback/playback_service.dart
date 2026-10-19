@@ -14,6 +14,7 @@ import '../storage/database.dart';
 import '../accounts/account_repository.dart';
 import '../net/fetch.dart';
 import '../catalog/details.dart';
+import '../providers/stalker.dart';
 
 /// One shared mpv player for the whole app.
 class PlaybackService {
@@ -35,6 +36,8 @@ class PlaybackService {
 
   PlaybackService(this.accounts) {
     _applyStartupPrefs();
+    // Stalker portals drop sessions that stop checking in: check in every 2 minutes while playing.
+    Timer.periodic(const Duration(minutes: 2), (_) => _stalkerKeepAlive());
     // Save movie/episode progress every 10 seconds while playing.
     Timer.periodic(const Duration(seconds: 10), (_) {
       final cur = current.value;
@@ -146,10 +149,18 @@ class PlaybackService {
   static const _maxReconnects = 8;
 
   /// Builds the play link at play time, so Xtream passwords stay in the Keychain.
+  /// Stalker asks the portal for a fresh link every time (they expire within minutes).
   Future<String> urlFor(Item item) async {
     if (item.url.isNotEmpty) return item.url;
     final acct = await accounts.get(item.accountId);
     if (acct == null) throw BMError('That account no longer exists.');
+    _types[acct.id] = acct.type;
+    if (acct.type == 'stalker') {
+      if (item.kind != 'live') throw BMError('Stalker movies and shows arrive in the next update.');
+      final cmd = stalkerCmd(item.extra);
+      if (cmd.isEmpty) throw BMError('This channel has no portal link saved. Reload the account.');
+      return StalkerHub.of(acct).liveLink(cmd);
+    }
     final pass = _passCache[acct.id] ??= (await accounts.password(acct.id) ?? '');
     final u = Uri.encodeComponent(acct.username);
     final p = Uri.encodeComponent(pass);
@@ -172,7 +183,8 @@ class PlaybackService {
     final np = player.platform;
     if (np is! NativePlayer) return;
     final path = (Uri.tryParse(url)?.path ?? '').toLowerCase();
-    final isEndlessTs = path.endsWith('.ts') || RegExp(r'/\d+$').hasMatch(path);
+    // Stalker live links (/play/live.php?...) don't look like .ts, but they are endless MPEG-TS.
+    final isEndlessTs = path.endsWith('.ts') || RegExp(r'/\d+$').hasMatch(path) || (item.kind == 'live' && _stalkerKnown(item));
     final isFile = RegExp(r'\.(mkv|mp4|avi|mov|m4v|wmv|flv|webm)$').hasMatch(path);
     await np.setProperty('network-timeout', '15');
     if (isEndlessTs || isFile) {
@@ -224,7 +236,20 @@ class PlaybackService {
     }
     handedOff.value = false;
     _triedAccounts.add(item.accountId);
-    final url = await urlFor(item);
+    final String url;
+    try {
+      url = await urlFor(item);
+    } on BMError catch (e) {
+      // A portal that won't hand out a link is as good as down: try the same channel elsewhere.
+      if (!isFailover && item.kind == 'live' && _stalkerKnown(item) && catalog != null) {
+        debugPrint('[stalker] no link for ${item.name}: $e');
+        current.value = item;
+        reconnecting.value = 'Portal not answering, finding a backup...';
+        _failoverOrGiveUp(item, '$e');
+        return;
+      }
+      rethrow;
+    }
     final host = Uri.tryParse(url)?.host ?? '';
     if (host.isNotEmpty) _triedHosts.add(host);
     // Known-down server: go straight to a backup instead of waiting on it.
@@ -251,7 +276,7 @@ class PlaybackService {
     // Begin right at your saved spot (no jump after loading, so no race).
     await _setStart(item.kind == 'live' ? null : resumeAt);
     await _applyTrackPrefs(item);
-    await player.open(Media(TsRelay.wrap(url), httpHeaders: {'User-Agent': bmUserAgent}), play: autoplay);
+    await player.open(Media(_wrap(item, url), httpHeaders: _headersFor(item)), play: autoplay);
     if (item.kind == 'live') {
       history?.record(item);
     } else if (resumeAt != null) {
@@ -318,7 +343,7 @@ class PlaybackService {
         if (pos.inSeconds >= 5) {
           await (player.platform as NativePlayer).setProperty('start', '${pos.inSeconds}');
         }
-        await player.open(Media(TsRelay.wrap(url), httpHeaders: {'User-Agent': bmUserAgent}));
+        await _reopen(item, url);
         await player.play();
       });
       return;
@@ -665,7 +690,7 @@ class PlaybackService {
       if (cur.kind != 'live' && tpos != null && tpos > 5) {
         await np.setProperty('start', '${tpos.floor()}');
       }
-      await player.open(Media(TsRelay.wrap(url), httpHeaders: {'User-Agent': bmUserAgent}));
+      await _reopen(cur, url);
       await player.play();
     }
   }
@@ -854,7 +879,7 @@ class PlaybackService {
       Future.delayed(Duration(milliseconds: recent403 ? 4000 * _startRetries : 2500), () async {
         _reconnectPending = false;
         if (current.value?.id != item.id) return;
-        await player.open(Media(TsRelay.wrap(url), httpHeaders: {'User-Agent': bmUserAgent}));
+        await _reopen(item, url);
         await player.play();
       });
       return;
@@ -887,9 +912,50 @@ class PlaybackService {
     Future.delayed(Duration(milliseconds: waitMs), () async {
       _reconnectPending = false;
       if (current.value?.id != item.id) return;
-      await player.open(Media(TsRelay.wrap(url), httpHeaders: {'User-Agent': bmUserAgent}));
+      await _reopen(item, url);
       // A reopened stream can come back paused; make sure it plays.
       await player.play();
     });
+  }
+
+  // ---------- Stalker ----------
+
+  /// Account type per account id, filled in as items play.
+  final _types = <String, String>{};
+
+  Future<bool> _isStalker(Item item) async {
+    final t = _types[item.accountId] ??= (await accounts.get(item.accountId))?.type ?? '';
+    return t == 'stalker';
+  }
+
+  bool _stalkerKnown(Item item) => _types[item.accountId] == 'stalker';
+
+  /// Stalker stream servers expect the MAG box's identity; everyone else gets VLC's.
+  Map<String, String> _headersFor(Item item) => {'User-Agent': _stalkerKnown(item) ? stalkerUserAgent : bmUserAgent};
+
+  /// Stalker live goes through the relay, which asks the portal for a fresh link on every reconnect.
+  String _wrap(Item item, String url) => _stalkerKnown(item) && item.kind == 'live'
+      ? TsRelay.wrap(url, live: true, refresh: () => urlFor(item))
+      : TsRelay.wrap(url);
+
+  /// Reopens a stream. Stalker links expire within minutes, so ask for a fresh one first.
+  Future<void> _reopen(Item item, String url) async {
+    if (await _isStalker(item)) {
+      try {
+        url = await urlFor(item);
+        _lastUrl = url;
+      } catch (e) {
+        debugPrint('[stalker] could not get a fresh link: $e');
+      }
+    }
+    await player.open(Media(_wrap(item, url), httpHeaders: _headersFor(item)));
+  }
+
+  /// Every 2 minutes while a Stalker channel plays, so the portal keeps the session.
+  Future<void> _stalkerKeepAlive() async {
+    final cur = current.value;
+    if (cur == null || !player.state.playing || !_stalkerKnown(cur)) return;
+    final a = await accounts.get(cur.accountId);
+    if (a != null) await StalkerHub.of(a).watchdog();
   }
 }

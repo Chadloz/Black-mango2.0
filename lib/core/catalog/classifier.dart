@@ -30,7 +30,7 @@ const _words = {
   'united states': 'United States', 'usa': 'United States', 'canada': 'Canada', 'mexico': 'Mexico',
   'spain': 'Spain', 'españa': 'Spain', 'portugal': 'Portugal', 'brazil': 'Brazil', 'brasil': 'Brazil',
   'argentina': 'Argentina', 'colombia': 'Colombia', 'latino': 'Latin America', 'latin': 'Latin America',
-  'france': 'France', 'germany': 'Germany', 'deutsch': 'Germany', 'italy': 'Italy', 'italia': 'Italy',
+  'france': 'France', 'germany': 'Germany', 'deutsch': 'Germany', 'deutschland': 'Germany', 'italy': 'Italy', 'italia': 'Italy',
   'poland': 'Poland', 'polska': 'Poland', 'turkey': 'Turkey', 'türk': 'Turkey', 'arabic': 'Arabic',
   'arab': 'Arabic', 'india': 'India', 'pakistan': 'Pakistan', 'russia': 'Russia', 'greece': 'Greece',
   'netherlands': 'Netherlands', 'romania': 'Romania', 'africa': 'Africa', 'philippines': 'Philippines',
@@ -104,7 +104,8 @@ Classified classifyVod(String category, String name) {
   return Classified(genre, country, _lang[country] ?? '');
 }
 
-final _prefixRe = RegExp(r'^\s*[\[\(|]?\s*([A-Za-z]{2,5}(?:-[A-Za-z]{2})?)\s*[\]\)]?\s*[|:\-]');
+// A country code at the start, set off by any symbol: "US | ...", "[UK] ...", "DE ✨ ...", "⚡FR⚡ ...".
+final _prefixRe = RegExp(r'^[^A-Za-z0-9]*([A-Za-z]{2,5}(?:-[A-Za-z]{2})?)(?:\s*[\]\)]|\s*[^\w\s\]\)])');
 
 String _country(String s) {
   final m = _prefixRe.firstMatch(s);
