@@ -70,4 +70,5 @@ One connection per account
 - Stalker live requests don't send a Range header (live streams can't seek; the plain request is what works).
 - A 509 counts as "busy", not "server down".
 - Smart paste: with several URLs, the one labeled Portal or Panel wins, else the first ending in /c/ or portal.php. With several MACs, offer one account each after a confirm.
+- Smart paste details (October 2026): it reads the paste as soon as you paste (Detect stays as a backup). It copes with fancy-font labels, emoji and box-drawing decorations, and values run together ("link,MAC"). Several MACs become one account each, named like "amster9216.pro · E0:67", loaded one after another. A Stalker paste that also carries an M3U/Xtream login stays Stalker, with a one-click "Use the M3U login instead": usually the better choice in Black Mango (the whole catalog loads at once), but it's the same subscription and connection limit, so it's one or the other. Afterwards it says what it found and what it ignored ("Found: portal, 2 MACs. Ignored: expiry date, 1 other link.").
 - Credit for stalkerhek: README plus file headers.

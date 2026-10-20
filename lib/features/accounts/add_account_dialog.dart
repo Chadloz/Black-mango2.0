@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/services.dart';
@@ -31,19 +32,31 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   String? _testMsg;
   bool _testOk = false;
   bool _testing = false;
+  ParsedAccount? _parsed; // what the last paste turned into (several MACs, an M3U login on the side...)
+  Timer? _pasteTimer;
 
   @override
   void dispose() {
+    _pasteTimer?.cancel();
     for (final c in [_paste, _server, _user, _pass, _mac, _url, _name, _serial, _deviceId]) {
       c.dispose();
     }
     super.dispose();
   }
 
+  /// Reads the paste box as soon as you paste (Detect does the same on demand).
+  void _onPasteChanged(String _) {
+    _pasteTimer?.cancel();
+    _pasteTimer = Timer(const Duration(milliseconds: 400), () {
+      if (mounted && _paste.text.trim().isNotEmpty) _detect();
+    });
+  }
+
   void _detect() {
     final p = parseAccountText(_paste.text);
     setState(() {
       _error = null;
+      _parsed = p;
       if (p.isEmpty) {
         _notes = ['Nothing recognizable found. Fill in the form below.'];
         return;
@@ -55,7 +68,24 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
       if (p.mac.isNotEmpty) _mac.text = p.mac;
       if (p.url.isNotEmpty) _url.text = p.url;
       if (_name.text.trim().isEmpty && p.suggestedName.isNotEmpty) _name.text = p.suggestedName;
-      _notes = p.notes;
+      _notes = [
+        if (p.summary.isNotEmpty) p.summary,
+        if (p.macs.length > 1) 'Saving adds one account per MAC (you\'ll confirm first).',
+        ...p.notes,
+      ];
+    });
+  }
+
+  /// The paste also had an Xtream / M3U login for the same provider: use that instead of the MAC.
+  void _useAltLogin() {
+    final p = _parsed;
+    if (p == null || !p.hasAltLogin) return;
+    setState(() {
+      _type = 'xtream';
+      _server.text = p.altServer;
+      _user.text = p.altUsername;
+      _pass.text = p.altPassword;
+      _notes = ['Switched to the M3U login (Xtream). The whole catalog loads at once this way.'];
     });
   }
 
@@ -106,6 +136,25 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
       setState(() => _error = err);
       return;
     }
+    // Several MACs in the paste (and you kept the first one in the form): one account each, after you confirm.
+    final macs = _parsed?.macs ?? const <String>[];
+    var allMacs = false;
+    if (_type == 'stalker' && macs.length > 1 && StalkerIdentity.normMac(_mac.text) == macs.first) {
+      final choice = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('Add ${macs.length} accounts?'),
+          content: Text('This paste has ${macs.length} MAC addresses for the same portal. '
+              'Add one account for each, or just the one in the form?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Just this one')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Add ${macs.length} accounts')),
+          ],
+        ),
+      );
+      if (choice == null || !mounted) return;
+      allMacs = choice;
+    }
     setState(() {
       _saving = true;
       _error = null;
@@ -113,6 +162,10 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
     final displayServer = _type == 'm3u' ? normalizeServer(hostOf(url)) : server;
     final fallbackName = hostOf(displayServer);
     final name = _name.text.trim().isNotEmpty ? _name.text.trim() : (fallbackName.isNotEmpty ? fallbackName : 'My Provider');
+    if (allMacs) {
+      await _saveEach(name, displayServer, macs);
+      return;
+    }
     try {
       final id = await Services.accounts.add(
         type: _type,
@@ -145,6 +198,38 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
         _saving = false;
         _error = 'Could not save: $e';
       });
+    }
+  }
+
+  /// One Stalker account per MAC, named like "amster9216.pro · E0:67", then loaded one after another.
+  Future<void> _saveEach(String baseName, String server, List<String> macs) async {
+    final ids = <(String, String)>[];
+    try {
+      for (final mac in macs) {
+        final name = '$baseName · ${macTail(mac)}';
+        final id = await Services.accounts.add(type: 'stalker', name: name, server: server, mac: StalkerIdentity.normMac(mac));
+        ids.add((id, name));
+      }
+    } catch (e) {
+      setState(() {
+        _saving = false;
+        _error = 'Could not save: $e';
+      });
+      return;
+    }
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.pop(context);
+    messenger.showSnackBar(SnackBar(content: Text('Saved ${ids.length} accounts. Loading them one at a time...')));
+    for (final (id, name) in ids) {
+      final account = await Services.accounts.get(id);
+      if (account == null) continue;
+      try {
+        final msg = await Services.catalog.load(account);
+        messenger.showSnackBar(SnackBar(content: Text('$name: $msg')));
+      } catch (e) {
+        messenger.showSnackBar(SnackBar(content: Text('$name: load failed: $e')));
+      }
     }
   }
 
@@ -284,6 +369,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
               const _Label('QUICK PASTE'),
               TextField(
                 controller: _paste,
+                onChanged: _onPasteChanged,
                 minLines: 3,
                 maxLines: 6,
                 decoration: _dec("Paste a link, login details, or your provider's welcome message"),
@@ -302,6 +388,15 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   ),
                 ],
               ),
+              if (_type == 'stalker' && (_parsed?.hasAltLogin ?? false))
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _useAltLogin,
+                    icon: const Icon(Icons.swap_horiz, size: 18),
+                    label: const Text('Use the M3U login instead (usually better: the whole catalog loads at once)'),
+                  ),
+                ),
               const SizedBox(height: 20),
               SegmentedButton<String>(
                 segments: const [
