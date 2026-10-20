@@ -1,7 +1,8 @@
-# Black Mango release: push a tag like v2.0.0-beta.1 (test build) or v2.0.0 (final) and this
-# builds the Mac app in the cloud, packages a .dmg (for people) and a .zip (for the updater),
-# signs the update with the Sparkle key, publishes a GitHub Release, and adds it to the
-# update feed on the "updates" branch. Tags with a dash (-beta.1) are marked as pre-releases.
+# Black Mango release: push a tag like v2.0.0-beta.3 (test build) or v2.0.0 (final) and this
+# builds the Windows installer, then the Mac app; packages a .dmg (for people) and a .zip (for
+# the Mac updater); signs both updates (Sparkle EdDSA for Mac, WinSparkle DSA for Windows);
+# publishes one GitHub Release with everything; and adds both to the update feed on the
+# "updates" branch. Tags with a dash (-beta.3) are marked as pre-releases.
 name: Release
 
 on:
@@ -12,7 +13,57 @@ permissions:
   contents: write
 
 jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Version from the tag
+        id: v
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VER="${TAG#v}"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          echo "name=${VER%%-*}" >> "$GITHUB_OUTPUT"
+
+      - name: Build the app
+        shell: bash
+        run: |
+          flutter pub get
+          flutter build windows --release \
+            --build-name="${{ steps.v.outputs.name }}" \
+            --build-number="${{ github.run_number }}" \
+            --dart-define=BM_VERSION="${{ steps.v.outputs.ver }}"
+
+      - name: Include the Visual C++ runtime
+        shell: bash
+        run: |
+          # Flutter apps need these three files; most PCs have them, but not all.
+          for f in msvcp140.dll vcruntime140.dll vcruntime140_1.dll; do
+            cp "/c/Windows/System32/$f" build/windows/x64/runner/Release/
+          done
+
+      - name: Make the installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress | Out-Null
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc "/DAppVersion=${{ steps.v.outputs.ver }}" "/DOutputName=Black-Mango-${{ steps.v.outputs.ver }}-Setup" windows\installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/*.exe
+
   macos:
+    needs: windows
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v5
@@ -74,6 +125,29 @@ jobs:
           SIG=$(printf '%s' "$SPARKLE_PRIVATE_KEY" | ./sparkle/bin/sign_update --ed-key-file - "dist/Black-Mango-${{ steps.v.outputs.ver }}.zip")
           echo "sig=$SIG" >> "$GITHUB_OUTPUT"
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: dist
+
+      - name: Sign the Windows update
+        id: wsig
+        env:
+          WINSPARKLE_DSA_PRIVATE_KEY: ${{ secrets.WINSPARKLE_DSA_PRIVATE_KEY }}
+        run: |
+          if [ -z "$WINSPARKLE_DSA_PRIVATE_KEY" ]; then
+            echo "::error::The WINSPARKLE_DSA_PRIVATE_KEY secret is missing (repo Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$WINSPARKLE_DSA_PRIVATE_KEY" > "$RUNNER_TEMP/dsa_priv.pem"
+          EXE="dist/Black-Mango-${{ steps.v.outputs.ver }}-Setup.exe"
+          SIG=$(openssl dgst -sha1 -binary < "$EXE" | openssl dgst -sha1 -sign "$RUNNER_TEMP/dsa_priv.pem" | openssl enc -base64 -A)
+          rm -f "$RUNNER_TEMP/dsa_priv.pem"
+          if [ -z "$SIG" ]; then echo "::error::Could not sign the Windows installer."; exit 1; fi
+          echo "sig=$SIG" >> "$GITHUB_OUTPUT"
+          echo "len=$(stat -f%z "$EXE")" >> "$GITHUB_OUTPUT"
+
       - name: Release notes
         run: python3 tool/release_notes.py "${{ steps.v.outputs.tag }}" > dist/notes.md
 
@@ -87,6 +161,7 @@ jobs:
           files: |
             dist/*.dmg
             dist/*.zip
+            dist/*.exe
 
       - name: Add it to the update feed
         run: |
@@ -102,12 +177,23 @@ jobs:
             git -C feed rm -rfq .
           fi
           NOTES="release-notes/${{ steps.v.outputs.tag }}.md"
+          BASE="https://github.com/${{ github.repository }}/releases/download/${{ steps.v.outputs.tag }}"
           python3 tool/appcast.py \
             --feed feed/appcast.xml \
+            --os macos \
             --version "${{ steps.v.outputs.ver }}" \
             --build "${{ github.run_number }}" \
-            --url "https://github.com/${{ github.repository }}/releases/download/${{ steps.v.outputs.tag }}/Black-Mango-${{ steps.v.outputs.ver }}.zip" \
+            --url "$BASE/Black-Mango-${{ steps.v.outputs.ver }}.zip" \
             --signature '${{ steps.sig.outputs.sig }}' \
+            --notes "$NOTES"
+          python3 tool/appcast.py \
+            --feed feed/appcast.xml \
+            --os windows \
+            --version "${{ steps.v.outputs.ver }}" \
+            --build "${{ steps.v.outputs.name }}+${{ github.run_number }}" \
+            --url "$BASE/Black-Mango-${{ steps.v.outputs.ver }}-Setup.exe" \
+            --dsa-signature "${{ steps.wsig.outputs.sig }}" \
+            --length "${{ steps.wsig.outputs.len }}" \
             --notes "$NOTES"
           git -C feed add appcast.xml
           git -C feed commit -m "Update feed: ${{ steps.v.outputs.ver }}"

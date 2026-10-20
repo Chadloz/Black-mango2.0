@@ -28,7 +28,7 @@ Why things are the way they are. Newest first within each section. No portal URL
 ## Roadmap to the public release (October 2026)
 
 1. Release setup: test builds as GitHub pre-releases, with working updates.
-2. Windows.
+2. Windows (first test build: v2.0.0-beta.3).
 3. Skins, the very last thing before the drop: built-in skins, plus making your own by picking colors for the parts we expose, optionally with textures.
 4. Public release (2.0.0), plus a final 1.x update that says 2.0 is here, with a download button.
 
@@ -43,6 +43,14 @@ Why things are the way they are. Newest first within each section. No portal URL
 - The cloud build re-signs the whole app with a free ad-hoc signature (codesign --force --deep --sign -) and verifies it. Without that, a downloaded copy showed "damaged and can't be opened" (test build 1). Release pages also carry the xattr fallback line.
 - Moving data out of the sandbox (one time, Chad's Mac only): the library came over, but the saved passwords didn't; re-adding the Xtream accounts fixed it. New installs start fresh, so no one else is affected.
 - Live channels go to the player as open-ended streams (no length or range headers), even when a provider serves a looping file with a fixed size.
+
+## Windows (October 2026)
+
+- One tag builds both: a Windows job makes the installer, then the Mac job signs everything and publishes a single release with the .dmg, the Mac update .zip, and the Windows Setup .exe.
+- The installer (Inno Setup) installs for the current user only: no admin password, and updates install quietly. Start menu entry, uninstaller in Settings > Apps, and a desktop shortcut checkbox (checked by default). It includes the Visual C++ runtime files Flutter apps need.
+- No code signing on Windows for now: the first run shows "Windows protected your PC" > More info > Run anyway, once. The release page explains it.
+- Updates use WinSparkle (through the same updater package), reading the same feed. WinSparkle 0.8.1 only checks DSA signatures, so Windows has its own DSA key: the public half is built into the app (windows/runner/resources/dsa_pub.pem), the private half is on Chad's Mac (~/.black-mango-sparkle/dsa_priv.pem) and in the WINSPARKLE_DSA_PRIVATE_KEY secret. Every feed item says which system it's for (sparkle:os), so neither updater picks up the other's file. When a Windows update is ready, the app closes itself, the installer runs quietly, and it reopens Black Mango.
+- Keyboard shortcuts are single keys, so they work the same on Windows; anything that's Cmd on the Mac is Ctrl on Windows. Open in VLC looks for VLC under Program Files.
 
 ## Mini player (October 2026)
 

@@ -146,15 +146,25 @@ class PlayerMoreMenu extends StatelessWidget {
     await Future.delayed(const Duration(milliseconds: 800)); // let the provider register the hang-up
     final vlcArgs = [if (!live && pos > 5) '--start-time=$pos', url];
     try {
-      // Running VLC's own program passes the link (and start time) reliably.
-      // ("open --args" starts VLC, but the Mac version ignores the link.)
-      const bin = '/Applications/VLC.app/Contents/MacOS/VLC';
-      try {
-        await Process.start(bin, vlcArgs, mode: ProcessStartMode.detached);
-      } catch (e) {
-        debugPrint('[vlc] direct launch failed ($e), trying open -a');
-        final r = await Process.run('/usr/bin/open', ['-a', 'VLC', url]);
-        if (r.exitCode != 0) throw Exception('${r.stderr}');
+      if (Platform.isWindows) {
+        // VLC installs under Program Files (64-bit) or Program Files (x86).
+        final exe = [Platform.environment['ProgramFiles'], Platform.environment['ProgramFiles(x86)']]
+            .whereType<String>()
+            .map((d) => '$d\\VideoLAN\\VLC\\vlc.exe')
+            .firstWhere((p) => File(p).existsSync(), orElse: () => '');
+        if (exe.isEmpty) throw Exception('VLC is not installed');
+        await Process.start(exe, vlcArgs, mode: ProcessStartMode.detached);
+      } else {
+        // Running VLC's own program passes the link (and start time) reliably.
+        // ("open --args" starts VLC, but the Mac version ignores the link.)
+        const bin = '/Applications/VLC.app/Contents/MacOS/VLC';
+        try {
+          await Process.start(bin, vlcArgs, mode: ProcessStartMode.detached);
+        } catch (e) {
+          debugPrint('[vlc] direct launch failed ($e), trying open -a');
+          final r = await Process.run('/usr/bin/open', ['-a', 'VLC', url]);
+          if (r.exitCode != 0) throw Exception('${r.stderr}');
+        }
       }
       messenger.showSnackBar(const SnackBar(content: Text('Opened in VLC.')));
     } catch (e) {
