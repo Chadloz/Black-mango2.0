@@ -71,6 +71,49 @@ List<ItemsCompanion> buildStalkerLiveRows(String accountId, String api, List<Map
   return rows;
 }
 
+/// Builds movie or show rows from a Stalker list (a category page or search results).
+/// Plot, cast, year, and rating are saved with each title, so its page opens instantly.
+List<ItemsCompanion> buildStalkerVodRows(String accountId, String kind, List<Map> list, String Function(Map row) categoryOf) {
+  String s(dynamic v) => v == null ? '' : '$v'.trim();
+  final rows = <ItemsCompanion>[];
+  for (final m in list) {
+    final name = s(m['name']);
+    final id = s(m['id']);
+    if (name.isEmpty || id.isEmpty) continue;
+    if (kind == 'movie' && s(m['cmd']).isEmpty) continue;
+    final category = categoryOf(m);
+    // Country from the category ("DE ✨ KINO"); genre from the title's own genres when it has them.
+    final c = classifyVod(category, name);
+    final fromGenres = s(m['genres_str']).isEmpty ? 'Other' : classifyVod(s(m['genres_str']), '').genre;
+    final genre = fromGenres != 'Other' ? fromGenres : c.genre;
+    final logo = s(m['screenshot_uri']);
+    final extra = <String, String>{
+      if (s(m['cmd']).isNotEmpty) 'cmd': s(m['cmd']),
+      if (s(m['description']).isNotEmpty) 'plot': s(m['description']),
+      if (s(m['actors']).isNotEmpty) 'cast': s(m['actors']),
+      if (s(m['director']).isNotEmpty) 'director': s(m['director']),
+      if (s(m['genres_str']).isNotEmpty) 'genre': s(m['genres_str']),
+      if (s(m['year']).isNotEmpty && s(m['year']) != 'N/a') 'year': s(m['year']),
+      if (s(m['rating_imdb']).isNotEmpty) 'rating': s(m['rating_imdb']),
+      if (int.tryParse(s(m['time'])) != null) 'minutes': s(m['time']),
+    };
+    rows.add(ItemsCompanion.insert(
+      accountId: accountId,
+      kind: kind,
+      name: name,
+      nameLower: name.toLowerCase(),
+      category: Value(category),
+      logo: Value(logo.startsWith('http') ? logo : ''),
+      streamId: Value(id),
+      genre: Value(genre),
+      country: Value(c.country),
+      language: Value(c.language),
+      extra: Value(jsonEncode(extra)),
+    ));
+  }
+  return rows;
+}
+
 /// Parses an M3U playlist into database rows. Top-level for the background worker.
 List<ItemsCompanion> buildM3uRows(String accountId, String text) {
   final entries = parseM3u(text);
@@ -117,6 +160,12 @@ class CatalogService {
   /// accountId -> progress message, only while that account is loading.
   final status = ValueNotifier<Map<String, String>>({});
 
+  /// Bumps when Stalker movies or shows are added to the cache, so open screens refresh.
+  final vodChanges = ValueNotifier<int>(0);
+
+  /// What a Stalker category load or portal search is doing right now (for the count line), or null.
+  final vodStatus = ValueNotifier<String?>(null);
+
   void _set(String id, String? msg) {
     final m = Map<String, String>.from(status.value);
     if (msg == null) {
@@ -130,9 +179,15 @@ class CatalogService {
   // ---------- Queries ----------
 
   Expression<bool> _filter(String kind,
-      {Set<String>? accountIds, String? genre, Set<String>? countries, Set<String>? languages, String query = ''}) {
+      {Set<String>? accountIds,
+      String? genre,
+      Set<String>? countries,
+      Set<String>? languages,
+      String query = '',
+      String? category}) {
     final t = db.items;
     Expression<bool> p = t.kind.equals(kind);
+    if (category != null) p = p & t.category.equals(category);
     if (accountIds != null && accountIds.isNotEmpty) p = p & t.accountId.isIn(accountIds);
     if (genre != null) p = p & t.genre.equals(genre);
     if (countries != null && countries.isNotEmpty) p = p & t.country.isIn(countries);
@@ -151,24 +206,31 @@ class CatalogService {
     return rows.map((r) => r.read(col) ?? '').where((s) => s.isNotEmpty).toList();
   }
 
-  Future<List<String>> countries(String kind, {Set<String>? accountIds}) =>
-      _distinct(db.items.country, _filter(kind, accountIds: accountIds));
+  Future<List<String>> countries(String kind, {Set<String>? accountIds, String? category}) =>
+      _distinct(db.items.country, _filter(kind, accountIds: accountIds, category: category));
 
-  Future<List<String>> languages(String kind, {Set<String>? accountIds}) =>
-      _distinct(db.items.language, _filter(kind, accountIds: accountIds));
+  Future<List<String>> languages(String kind, {Set<String>? accountIds, String? category}) =>
+      _distinct(db.items.language, _filter(kind, accountIds: accountIds, category: category));
 
   /// Genres that exist under the current account/country/language filters, in a fixed order.
-  Future<List<String>> genres(String kind, {Set<String>? accountIds, Set<String>? countries, Set<String>? languages}) async {
-    final found = await _distinct(
-        db.items.genre, _filter(kind, accountIds: accountIds, countries: countries, languages: languages));
+  Future<List<String>> genres(String kind,
+      {Set<String>? accountIds, Set<String>? countries, Set<String>? languages, String? category}) async {
+    final found = await _distinct(db.items.genre,
+        _filter(kind, accountIds: accountIds, countries: countries, languages: languages, category: category));
     final order = kind == 'live' ? genreOrder : movieGenreOrder;
     return [for (final g in order) if (found.contains(g)) g];
   }
 
   Future<List<Item>> items(String kind,
-      {Set<String>? accountIds, String? genre, Set<String>? countries, Set<String>? languages, String query = '', bool byName = false}) {
+      {Set<String>? accountIds,
+      String? genre,
+      Set<String>? countries,
+      Set<String>? languages,
+      String query = '',
+      bool byName = false,
+      String? category}) {
     final where = _filter(kind,
-        accountIds: accountIds, genre: genre, countries: countries, languages: languages, query: query);
+        accountIds: accountIds, genre: genre, countries: countries, languages: languages, query: query, category: category);
     return (db.select(db.items)
           ..where((_) => where)
           ..orderBy(byName
@@ -177,11 +239,17 @@ class CatalogService {
         .get();
   }
 
-  /// Movie or show info (plot, cast, episodes...). Xtream only; M3U has no extra info.
+  /// Movie or show info (plot, cast, episodes...). Xtream and Stalker; M3U has no extra info.
   Future<Details> details(Item item) async {
     final d = Details()..poster = item.logo;
     if (item.url.isNotEmpty) return d;
     final acct = await accounts.get(item.accountId);
+    if (acct != null && acct.type == 'stalker') {
+      final series = item.kind == 'series';
+      // Every season, with its episode numbers, comes back in one request.
+      final seasons = series ? await StalkerHub.of(acct).seasons(item.streamId) : const <Map>[];
+      return parseStalkerDetails(stalkerExtra(item.extra), seasons, d, series: series);
+    }
     if (acct == null || acct.type != 'xtream') return d;
     final pass = await accounts.password(acct.id) ?? '';
     final x = XtreamClient(acct.server, acct.username, pass);
@@ -313,7 +381,11 @@ class CatalogService {
       await _replace(id, rows, kinds: onlyKinds);
       if (onlyKinds != null) {
         final liveN = await _count(id, 'live');
-        await accounts.updateCounts(id, liveN, await _count(id, 'movie'), await _count(id, 'series'));
+        // The card shows what the portal has; titles are cached as you open categories.
+        final s = StalkerHub.of(a);
+        final movies = await s.vodTotal('vod') ?? await _count(id, 'movie');
+        final shows = await s.vodTotal('series') ?? await _count(id, 'series');
+        await accounts.updateCounts(id, liveN, movies, shows);
         return 'Loaded $liveN live channels. Movies and shows load by category when you open them.';
       }
       final live = rows.where((r) => r.kind.value == 'live').length;
@@ -324,6 +396,103 @@ class CatalogService {
     } finally {
       _set(a.id, null);
     }
+  }
+
+  // ---------- Stalker movies and shows ----------
+
+  static String _portalKind(String kind) => kind == 'movie' ? 'vod' : 'series';
+  final _catCache = <String, List<(String, String)>>{}; // 'account|kind' -> (id, title)
+  final _catLoading = <String>{};
+
+  /// The portal's categories for movies or shows (its "All" left out), cached for the session.
+  Future<List<(String, String)>> stalkerCategories(Account a, String kind) async {
+    final k = '${a.id}|$kind';
+    final have = _catCache[k];
+    if (have != null) return have;
+    final list = await StalkerHub.of(a).vodCategories(_portalKind(kind));
+    _catCache[k] = list;
+    return list;
+  }
+
+  static String _catKey(String accountId, String kind, String catId) => 'acct.$accountId.stalkercat.$kind.$catId';
+
+  /// When this category was last loaded in full (unix seconds), or 0.
+  int stalkerCategoryLoadedAt(String accountId, String kind, String catId) =>
+      Prefs.getInt(_catKey(accountId, kind, catId)) ?? 0;
+
+  /// Loads a category into the cache unless it was loaded in the last 24 hours ([force] reloads).
+  /// The first page shows right away; the rest keeps arriving in the background.
+  Future<void> openStalkerCategory(Account a, String kind, String catId, String title, {bool force = false}) async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final loaded = stalkerCategoryLoadedAt(a.id, kind, catId);
+    if (!force && now - loaded < 24 * 3600) return;
+    final busy = '${a.id}|$kind|$catId';
+    if (!_catLoading.add(busy)) return;
+    var first = true;
+    var lastBump = DateTime.fromMillisecondsSinceEpoch(0);
+    try {
+      vodStatus.value = 'Loading $title...';
+      await StalkerHub.of(a).vodCategory(_portalKind(kind), catId, (rows, done, total) async {
+        final built = buildStalkerVodRows(a.id, kind, rows, (_) => title);
+        await db.transaction(() async {
+          if (first) {
+            // Fresh copy of this category: drop what was cached for it before.
+            first = false;
+            await (db.delete(db.items)
+                  ..where((t) => t.accountId.equals(a.id) & t.kind.equals(kind) & t.category.equals(title)))
+                .go();
+          }
+          await db.batch((b) => b.insertAll(db.items, built));
+        });
+        vodStatus.value = done < total ? 'Loading $title ($done/$total)...' : null;
+        // Refresh open screens on the first page, then about every 1.5 s.
+        if (done == 1 || done == total || DateTime.now().difference(lastBump) > const Duration(milliseconds: 1500)) {
+          lastBump = DateTime.now();
+          vodChanges.value++;
+        }
+      });
+      await Prefs.setInt(_catKey(a.id, kind, catId), now);
+    } catch (e) {
+      debugPrint('[stalker] category "$title" did not finish loading: $e');
+      rethrow;
+    } finally {
+      _catLoading.remove(busy);
+      vodStatus.value = null;
+      vodChanges.value++;
+    }
+  }
+
+  /// Asks each Stalker account in [accountIds] (or all of them) to search all its titles,
+  /// and caches what it finds. Returns how many titles came back.
+  Future<int> searchStalker(String kind, String query, Set<String>? accountIds) async {
+    final q = query.trim();
+    if (q.length < 2) return 0;
+    var found = 0;
+    final all = await accounts.watchAll().first;
+    final targets = all.where((a) => a.type == 'stalker' && (accountIds == null || accountIds.isEmpty || accountIds.contains(a.id)));
+    for (final a in targets) {
+      try {
+        vodStatus.value = 'Searching ${a.name} for "$q"...';
+        final cats = {for (final c in await stalkerCategories(a, kind)) c.$1: c.$2};
+        final list = await StalkerHub.of(a).vodSearch(_portalKind(kind), q);
+        final built = buildStalkerVodRows(a.id, kind, list, (m) => cats['${m['category_id'] ?? ''}'] ?? '');
+        if (built.isEmpty) continue;
+        // Skip titles already cached under the same category.
+        final ids = built.map((r) => r.streamId.value).toList();
+        final have = await (db.select(db.items)
+              ..where((t) => t.accountId.equals(a.id) & t.kind.equals(kind) & t.streamId.isIn(ids)))
+            .get();
+        final seen = {for (final h in have) '${h.streamId}|${h.category}'};
+        final fresh = built.where((r) => !seen.contains('${r.streamId.value}|${r.category.value}')).toList();
+        if (fresh.isNotEmpty) await db.batch((b) => b.insertAll(db.items, fresh));
+        found += built.length;
+      } catch (e) {
+        debugPrint('[stalker] search on ${a.name} failed: $e');
+      }
+    }
+    vodStatus.value = null;
+    vodChanges.value++;
+    return found;
   }
 
   Future<int> _count(String accountId, String kind) async {

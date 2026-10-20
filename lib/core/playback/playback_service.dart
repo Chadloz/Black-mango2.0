@@ -156,10 +156,13 @@ class PlaybackService {
     if (acct == null) throw BMError('That account no longer exists.');
     _types[acct.id] = acct.type;
     if (acct.type == 'stalker') {
-      if (item.kind != 'live') throw BMError('Stalker movies and shows arrive in the next update.');
-      final cmd = stalkerCmd(item.extra);
-      if (cmd.isEmpty) throw BMError('This channel has no portal link saved. Reload the account.');
-      return StalkerHub.of(acct).liveLink(cmd);
+      final x = stalkerExtra(item.extra);
+      final cmd = '${x['cmd'] ?? ''}';
+      if (cmd.isEmpty) throw BMError('This title has no portal link saved. Reload the account or reopen its category.');
+      final s = StalkerHub.of(acct);
+      if (item.kind == 'live') return s.liveLink(cmd);
+      // Movies play from their own command; an episode is its season's command plus the episode number.
+      return s.vodLink(cmd, episode: '${x['series'] ?? ''}');
     }
     final pass = _passCache[acct.id] ??= (await accounts.password(acct.id) ?? '');
     final u = Uri.encodeComponent(acct.username);
@@ -186,7 +189,9 @@ class PlaybackService {
     // Stalker live links (/play/live.php?...) don't look like .ts, but they are endless MPEG-TS.
     final isEndlessTs = path.endsWith('.ts') || RegExp(r'/\d+$').hasMatch(path) || (item.kind == 'live' && _stalkerKnown(item));
     final isFile = RegExp(r'\.(mkv|mp4|avi|mov|m4v|wmv|flv|webm)$').hasMatch(path);
-    await np.setProperty('network-timeout', '15');
+    // Stalker: a busy one-connection server can take up to ~45 s to answer. Wait for it
+    // instead of giving up at 15 s and retrying (each retry would queue behind the last).
+    await np.setProperty('network-timeout', item.kind == 'live' && _stalkerKnown(item) ? '60' : '15');
     if (isEndlessTs || isFile) {
       // One continuous download: let FFmpeg reconnect on drops.
       // Live .ts also reconnects at "end of file", since a live channel never truly ends.
@@ -215,6 +220,16 @@ class PlaybackService {
   }
 
   Future<void> play(Item item, {bool autoplay = true, bool isFailover = false}) async {
+    final seq = ++_playSeq;
+    // Flipping through a Stalker account's channels: ask the portal only once you've stayed on
+    // one for about a second, so the channels you pass don't tie up its one connection.
+    if (!isFailover && item.kind == 'live' && current.value != null && await _isStalker(item)) {
+      await _saveProgress();
+      _reconnectPending = true; // the old stream's hiccups don't matter anymore
+      current.value = item; // highlight the pick right away
+      await Future.delayed(const Duration(milliseconds: 900));
+      if (seq != _playSeq) return; // you kept flipping
+    }
     if (!isFailover) {
       VodFailover.lastSwitch.value = null;
       _vodRetries = 0;
@@ -276,7 +291,16 @@ class PlaybackService {
     // Begin right at your saved spot (no jump after loading, so no race).
     await _setStart(item.kind == 'live' ? null : resumeAt);
     await _applyTrackPrefs(item);
+    TsRelay.cancelPending(); // requests for what you walked away from can't hold a connection slot
     await player.open(Media(_wrap(item, url), httpHeaders: _headersFor(item)), play: autoplay);
+    if (item.kind == 'live' && _stalkerKnown(item)) {
+      // Normal Stalker starts take 3-5 s. Longer means the server is still holding your last channel.
+      Future.delayed(const Duration(seconds: 6), () {
+        if (seq == _playSeq && !_started && current.value?.id == item.id && reconnecting.value == null) {
+          reconnecting.value = 'Waiting for the provider to start this channel...';
+        }
+      });
+    }
     if (item.kind == 'live') {
       history?.record(item);
     } else if (resumeAt != null) {
@@ -285,26 +309,7 @@ class PlaybackService {
   }
 
   /// Plays one episode of a show.
-  Future<void> playEpisode(Item show, EpisodeInfo ep) {
-    final label = 'S${ep.season} E${ep.number}${ep.title.isEmpty ? '' : '  ${ep.title}'}';
-    final item = Item(
-      id: -(int.tryParse(ep.id) ?? ep.id.hashCode.abs()),
-      accountId: show.accountId,
-      kind: 'episode',
-      name: '${show.name}   $label',
-      nameLower: '',
-      category: show.category,
-      logo: ep.image.isNotEmpty ? ep.image : show.logo,
-      streamId: ep.id,
-      ext: ep.ext,
-      url: '',
-      position: 0,
-      genre: show.genre,
-      country: show.country,
-      language: show.language,
-    );
-    return play(item);
-  }
+  Future<void> playEpisode(Item show, EpisodeInfo ep) => play(episodeItemFor(show, ep));
 
   /// App is quitting: save progress and hang up cleanly so the provider releases the connection.
   /// Keeps the session info, so the next launch can restore it.
@@ -317,6 +322,7 @@ class PlaybackService {
   }
 
   Future<void> stop() async {
+    TsRelay.cancelPending();
     await _saveProgress();
     failoverOrigin = null;
     handedOff.value = false;
@@ -841,10 +847,10 @@ class PlaybackService {
     // A 403 means the server is up but still holding our old connection: not a dead server.
     // A 4xx answer (404 missing channel, 403 busy) proves the server is up: don't count it as down.
     final code = _lastHttpCode ?? 0;
+    // 509 is how some providers say "too many connections": also busy, not down.
     final was4xx = _lastHttpAt != null &&
         DateTime.now().difference(_lastHttpAt!) < const Duration(seconds: 10) &&
-        code >= 400 &&
-        code < 500;
+        ((code >= 400 && code < 500) || code == 509);
     if (why.contains('Failed to open') && !was403 && !was4xx) {
       final h = Uri.tryParse(_lastUrl ?? '')?.host ?? '';
       if (h.isNotEmpty) health?.fail(h, _lastUrl ?? '');
@@ -862,12 +868,16 @@ class PlaybackService {
     if (!_started) {
       // A 403 usually means our old connection is still open, so be patient before failing over.
       final just403 = _last403 != null && DateTime.now().difference(_last403!) < const Duration(seconds: 10);
-      if (_startRetries >= (just403 ? 3 : 1)) {
+      // Stalker already waited up to a minute for the server: go straight to a backup.
+      final stalker = _stalkerKnown(item);
+      if (_startRetries >= (stalker ? 0 : (just403 ? 3 : 1))) {
         _failoverOrGiveUp(
             item,
-            just403
-                ? 'This account is already in use (one connection at a time). Close VLC or other devices using it, then try again.'
-                : "This channel isn't working right now. Try another one.");
+            stalker
+                ? "The provider didn't free up your connection. Try again in a minute, or pick another channel."
+                : just403
+                    ? 'This account is already in use (one connection at a time). Close VLC or other devices using it, then try again.'
+                    : "This channel isn't working right now. Try another one.");
         return;
       }
       _startRetries++;
@@ -933,10 +943,13 @@ class PlaybackService {
   /// Stalker stream servers expect the MAG box's identity; everyone else gets VLC's.
   Map<String, String> _headersFor(Item item) => {'User-Agent': _stalkerKnown(item) ? stalkerUserAgent : bmUserAgent};
 
-  /// Stalker live goes through the relay, which asks the portal for a fresh link on every reconnect.
+  /// Stalker live goes through the relay, which asks the portal for a fresh link on every reconnect
+  /// and keeps one request per account (a new one closes the previous).
   String _wrap(Item item, String url) => _stalkerKnown(item) && item.kind == 'live'
-      ? TsRelay.wrap(url, live: true, refresh: () => urlFor(item))
+      ? TsRelay.wrap(url, live: true, refresh: () => urlFor(item), group: item.accountId)
       : TsRelay.wrap(url);
+
+  int _playSeq = 0; // bumps on every play(), so a flip you moved past can bow out
 
   /// Reopens a stream. Stalker links expire within minutes, so ask for a fresh one first.
   Future<void> _reopen(Item item, String url) async {

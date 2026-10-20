@@ -82,15 +82,19 @@ class StalkerSettings {
   static Future<void> update(String accountId, String k, String v) => write(accountId, read(accountId)..[k] = v);
 }
 
-/// The portal's command for a channel, saved in the item's extra info.
-String stalkerCmd(String? extra) {
+/// A Stalker item's extra info: {"cmd": ...} for channels; movies and shows add plot, cast,
+/// director, genre, year, rating; episodes add "series" (the episode number).
+Map<String, dynamic> stalkerExtra(String? extra) {
   try {
     final m = jsonDecode(extra ?? '');
-    return m is Map ? '${m['cmd'] ?? ''}' : '';
+    return m is Map ? Map<String, dynamic>.from(m) : <String, dynamic>{};
   } catch (_) {
-    return '';
+    return <String, dynamic>{};
   }
 }
+
+/// The portal's command for a channel, movie, or season, saved in the item's extra info.
+String stalkerCmd(String? extra) => '${stalkerExtra(extra)['cmd'] ?? ''}';
 
 /// Channel logos can be full links, server paths, or bare file names.
 String stalkerLogo(String logo, String api) {
@@ -471,6 +475,120 @@ class StalkerClient {
       if (part.startsWith('http://') || part.startsWith('https://')) return part;
     }
     return null;
+  }
+
+  // ---------- Movies and shows ----------
+  // [kind] is the portal's type: 'vod' for movies, 'series' for shows.
+
+  /// The portal's categories, without its own "All" (that would be the full crawl).
+  Future<List<(String, String)>> vodCategories(String kind) async {
+    final j = await request({'type': kind, 'action': 'get_categories'});
+    final out = <(String, String)>[];
+    if (j is List) {
+      for (final c in j.whereType<Map>()) {
+        final id = '${c['id'] ?? ''}';
+        if (id.isEmpty || id == '*') continue;
+        out.add((id, '${c['title'] ?? ''}'.trim()));
+      }
+    }
+    return out;
+  }
+
+  /// How many titles the portal has in all (its "All" category's count), or null.
+  Future<int?> vodTotal(String kind) async {
+    try {
+      final j = await request({'type': kind, 'action': 'get_ordered_list', 'category': '*', 'p': '1'});
+      return j is Map ? int.tryParse('${j['total_items'] ?? ''}') : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static List<Map> _rows(dynamic j) =>
+      j is Map && j['data'] is List ? (j['data'] as List).whereType<Map>().toList() : <Map>[];
+
+  /// Every page of a list (a category or a search), first page first, then the rest 4 at a time.
+  /// [onPage] gets each page's rows as they arrive, with pages done / pages total.
+  Future<void> _pages(Map<String, String> q, Future<void> Function(List<Map> rows, int done, int total) onPage,
+      {int maxPages = 100000}) async {
+    final first = await request({...q, 'p': '1'});
+    final firstRows = _rows(first);
+    final total = first is Map ? int.tryParse('${first['total_items'] ?? ''}') ?? firstRows.length : firstRows.length;
+    var per = first is Map ? int.tryParse('${first['max_page_items'] ?? ''}') ?? firstRows.length : firstRows.length;
+    if (per <= 0) per = 14;
+    final pages = min(maxPages, total <= 0 ? 1 : (total + per - 1) ~/ per);
+    var done = 1;
+    await onPage(firstRows, done, pages);
+    var next = 2;
+    Future<void> worker() async {
+      while (true) {
+        final p = next++;
+        if (p > pages) return;
+        var rows = <Map>[];
+        for (var attempt = 0; attempt < 3; attempt++) {
+          try {
+            rows = _rows(await request({...q, 'p': '$p'}));
+            break;
+          } catch (e) {
+            if (attempt == 2) debugPrint('[stalker] page $p failed: $e');
+            await Future.delayed(Duration(milliseconds: 800 * (attempt + 1)));
+          }
+        }
+        await onPage(rows, ++done, pages);
+      }
+    }
+
+    await Future.wait(List.generate(4, (_) => worker()));
+  }
+
+  /// A category's titles, page by page as they arrive.
+  Future<void> vodCategory(String kind, String categoryId,
+          Future<void> Function(List<Map> rows, int done, int total) onPage) =>
+      _pages({'type': kind, 'action': 'get_ordered_list', 'category': categoryId, 'sortby': 'added'}, onPage);
+
+  /// The portal's own search (all its titles, not just what's cached). Up to 10 pages.
+  Future<List<Map>> vodSearch(String kind, String query) async {
+    final out = <Map>[];
+    await _pages({'type': kind, 'action': 'get_ordered_list', 'search': query}, (rows, _, __) async => out.addAll(rows),
+        maxPages: 10);
+    return out;
+  }
+
+  /// A show's seasons. Each season row lists its episode numbers in "series".
+  Future<List<Map>> seasons(String showId) async {
+    final out = <Map>[];
+    await _pages({'type': 'series', 'action': 'get_ordered_list', 'movie_id': showId, 'season_id': '0', 'episode_id': '0'},
+        (rows, _, __) async => out.addAll(rows));
+    return out;
+  }
+
+  /// A playable movie or episode link. Movie links can be reused and seeked.
+  Future<String> vodLink(String cmd, {String episode = ''}) async {
+    final j = await request({
+      'type': 'vod',
+      'action': 'create_link',
+      'cmd': cmd,
+      'series': episode,
+      'forced_storage': 'undefined',
+      'disable_ad': '0',
+      'download': '0',
+      'force_ch_link_check': '0',
+    });
+    var raw = '';
+    if (j is Map) {
+      raw = '${j['url'] ?? ''}'.trim();
+      if (raw.isEmpty) raw = '${j['cmd'] ?? ''}'.trim();
+    }
+    final link = streamUrlOf(raw);
+    final u = link == null ? null : Uri.tryParse(link);
+    if (link == null || u == null || u.host == 'localhost') {
+      final err = j is Map ? '${j['error'] ?? ''}'.trim() : '';
+      debugPrint('[stalker] no movie link (answer: ${j is Map ? j.keys.join(',') : j.runtimeType}${err.isEmpty ? '' : ', error: $err'})');
+      throw BMError('The portal did not give a playable link for this title.');
+    }
+    debugPrint('[stalker] new movie link: ${u.scheme}://${u.host}${u.hasPort ? ':${u.port}' : ''}${u.path}'
+        '${episode.isEmpty ? '' : ' (episode $episode)'}');
+    return link;
   }
 
   /// Keep-alive: what a MAG box sends so the portal doesn't drop the session.

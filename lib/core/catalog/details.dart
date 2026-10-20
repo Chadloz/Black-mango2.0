@@ -1,4 +1,7 @@
-/// Info for a movie or show, plus episodes for shows.
+import 'dart:convert';
+import '../storage/database.dart';
+
+// Info for a movie or show, plus episodes for shows.
 
 class EpisodeInfo {
   final String id;
@@ -9,6 +12,7 @@ class EpisodeInfo {
   final String plot;
   final String duration;
   final String image;
+  final String? extra; // provider-specific play info (Stalker: the season's command and episode number)
   const EpisodeInfo({
     required this.id,
     required this.season,
@@ -18,7 +22,31 @@ class EpisodeInfo {
     required this.plot,
     required this.duration,
     required this.image,
+    this.extra,
   });
+}
+
+/// The playable item for one episode of [show]. Shared by the episode list, failover, and next episode.
+Item episodeItemFor(Item show, EpisodeInfo ep, {String fallbackTitle = ''}) {
+  final title = ep.title.isNotEmpty ? ep.title : fallbackTitle;
+  final label = 'S${ep.season} E${ep.number}${title.isEmpty ? '' : '  $title'}';
+  return Item(
+    id: -(int.tryParse(ep.id) ?? ep.id.hashCode.abs()),
+    accountId: show.accountId,
+    kind: 'episode',
+    name: '${show.name}   $label',
+    nameLower: '',
+    category: show.category,
+    logo: ep.image.isNotEmpty ? ep.image : show.logo,
+    streamId: ep.id,
+    ext: ep.ext,
+    url: '',
+    position: 0,
+    genre: show.genre,
+    country: show.country,
+    language: show.language,
+    extra: ep.extra,
+  );
 }
 
 class Details {
@@ -43,6 +71,52 @@ String _s(dynamic v) {
 String _http(dynamic v) {
   final s = _s(v);
   return s.startsWith('http') ? s : '';
+}
+
+/// Fills [d] from a Stalker title's saved info ([x] is its extra info) and, for shows,
+/// its season rows (each lists its episode numbers; an episode plays as season command + number).
+Details parseStalkerDetails(Map<String, dynamic> x, List<Map> seasonRows, Details d, {required bool series}) {
+  d.plot = _s(x['plot']);
+  d.cast = _s(x['cast']);
+  d.director = _s(x['director']);
+  d.genre = _s(x['genre']);
+  final y = _s(x['year']);
+  d.year = y.length >= 4 ? y.substring(0, 4) : y;
+  final r = double.tryParse(_s(x['rating']));
+  d.rating = (r == null || r == 0) ? '' : r.toStringAsFixed(1);
+  final mins = int.tryParse(_s(x['minutes']));
+  if (mins != null && mins >= 10) d.duration = '$mins min';
+  if (series) {
+    for (final s in seasonRows) {
+      final sid = _s(s['id']);
+      final cmd = _s(s['cmd']);
+      if (sid.isEmpty || cmd.isEmpty) continue;
+      // "8625:3" is season 3; otherwise take the number from the name ("Season 3").
+      final sn = int.tryParse(sid.split(':').last) ??
+          int.tryParse(RegExp(r'(\d+)').firstMatch(_s(s['name']))?.group(1) ?? '') ??
+          1;
+      final eps = s['series'] is List ? (s['series'] as List) : const [];
+      for (final e in eps) {
+        final n = int.tryParse('$e');
+        if (n == null) continue;
+        d.seasons.putIfAbsent(sn, () => []).add(EpisodeInfo(
+              id: '$sid:$n',
+              season: sn,
+              number: n,
+              title: '',
+              ext: '',
+              plot: '',
+              duration: '',
+              image: '',
+              extra: jsonEncode({'cmd': cmd, 'series': '$n'}),
+            ));
+      }
+    }
+    for (final list in d.seasons.values) {
+      list.sort((a, b) => a.number.compareTo(b.number));
+    }
+  }
+  return d;
 }
 
 /// Fills [d] from an Xtream get_vod_info / get_series_info answer.

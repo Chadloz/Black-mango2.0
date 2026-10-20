@@ -25,6 +25,16 @@ class TsRelay {
   static HttpServer? _server;
   static final _urls = <String, _Target>{};
   static int _next = 0;
+  static final _pending = <Object, void Function()>{}; // requests still waiting on the provider's answer
+  static final _owners = <String, (Object, void Function())>{}; // Stalker account -> its one request
+
+  /// Cancels every request still waiting on a provider's answer. Called when you pick something
+  /// else, so a request you walked away from can't hold a one-connection account's slot.
+  static void cancelPending() {
+    for (final stop in List.of(_pending.values)) {
+      stop();
+    }
+  }
 
   static Future<void> start() async {
     if (_server != null) return;
@@ -48,11 +58,12 @@ class TsRelay {
 
   /// The URL the player should open. Live .ts goes through the relay; everything else is untouched.
   /// [live] marks a stream known to be live MPEG-TS even when its link doesn't look like one (Stalker).
-  static String wrap(String url, {bool live = false, Future<String> Function()? refresh}) {
+  /// [group] (a Stalker account) allows one request at a time: a new one closes the previous.
+  static String wrap(String url, {bool live = false, Future<String> Function()? refresh, String? group}) {
     final s = _server;
     if (s == null || Prefs.getBool('relay.off') || !(live || _isLiveTs(url))) return url;
     final id = '${_next++}';
-    _urls[id] = _Target(url, refresh);
+    _urls[id] = _Target(url, refresh, group);
     if (_urls.length > 40) _urls.remove(_urls.keys.first);
     return 'http://127.0.0.1:${s.port}/r/$id.ts';
   }
@@ -67,35 +78,59 @@ class TsRelay {
       await res.close();
       return;
     }
-    // Stalker links are good for one connection. When the player asks for the same stream
-    // again (it reconnects on its own sometimes), get a fresh link instead of the spent one.
     final stalker = t.refresh != null;
-    if (stalker && t.used) {
-      try {
-        t.url = await t.refresh!();
-      } catch (e) {
-        debugPrint('[relay] could not get a fresh link: $e');
-      }
-    }
-    t.used = true;
-    var target = t.url;
-    final name = _label(target);
-    debugPrint('[relay] stream $name via relay');
-    final asked = DateTime.now();
-    var sentTotal = 0;
+    final name = _label(t.url);
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 12)
       ..autoUncompress = false;
     Socket? socket;
     var closed = false;
-    // Closes both sides. Called the moment the player hangs up or we give up,
-    // so the provider's connection slot is freed right away.
+    final key = Object();
+    final group = t.group;
+    // Closes both sides. Called the moment the player hangs up, we give up, or a newer request
+    // for the same Stalker account takes over, so the provider's connection slot is freed right away.
     void shutdown() {
       if (closed) return;
       closed = true;
       client.close(force: true);
       socket?.destroy();
+      _pending.remove(key);
+      if (group != null && _owners[group]?.$1 == key) _owners.remove(group);
     }
+
+    _pending[key] = shutdown;
+    // One connection per Stalker account: a new request (another channel, or the player's own
+    // retry) closes the previous one instead of queueing behind it at the provider.
+    if (group != null) {
+      final prev = _owners[group];
+      if (prev != null) {
+        debugPrint('[relay] $name: closing this account\'s previous request first (one connection at a time)');
+        prev.$2();
+      }
+      _owners[group] = (key, shutdown);
+    }
+
+    // Stalker links are good for one connection. When the player asks for the same stream
+    // again (it reconnects on its own sometimes), get a fresh link instead of the spent one.
+    if (stalker && t.used) {
+      try {
+        t.url = await t.refresh!();
+      } catch (e) {
+        debugPrint('[relay] could not get a fresh link: ${_why(e)}');
+      }
+    }
+    t.used = true;
+    if (closed) {
+      // A newer request took over while we were getting the link.
+      try {
+        await res.close();
+      } catch (_) {}
+      return;
+    }
+    var target = t.url;
+    debugPrint('[relay] stream $name via relay');
+    final asked = DateTime.now();
+    var sentTotal = 0;
 
     Future<HttpClientResponse> open({bool fresh = false}) async {
       final refresh = t.refresh;
@@ -103,7 +138,7 @@ class TsRelay {
         try {
           target = await refresh();
         } catch (e) {
-          debugPrint('[relay] $name could not get a fresh link: $e');
+          debugPrint('[relay] $name could not get a fresh link: ${_why(e)}');
         }
       }
       final up = await client.getUrl(Uri.parse(target));
@@ -111,19 +146,20 @@ class TsRelay {
         final v = req.headers.value(h);
         if (v != null) up.headers.set(h, v);
       }
-      if (!fresh) {
+      // Live Stalker streams can't seek, and their servers want a plain request: no Range.
+      if (!fresh && !stalker) {
         final range = req.headers.value('range');
         if (range != null) up.headers.set('range', range);
       }
       final began = DateTime.now();
-      final r = await up.close();
+      // A busy Stalker server can sit on a request for ~45 s before saying no (509): stop at 55.
+      final r = stalker ? await up.close().timeout(const Duration(seconds: 55)) : await up.close();
       if (stalker) {
         // Diagnostics for Stalker: what the stream server answered (never the link itself).
         final hops = r.redirects.isEmpty ? '' : ', redirected to ${r.redirects.last.location.host}';
         debugPrint('[relay] $name: server answered ${r.statusCode} '
             '${r.headers.value('content-type') ?? '-'}, length ${r.contentLength}, '
-            'in ${DateTime.now().difference(began).inMilliseconds} ms'
-            '${up.headers.value('range') != null ? ', player asked for a range' : ''}$hops');
+            'in ${DateTime.now().difference(began).inMilliseconds} ms$hops');
       }
       return r;
     }
@@ -152,6 +188,9 @@ class TsRelay {
       }
       final s = await res.detachSocket(writeHeaders: true);
       socket = s;
+      // Write errors (the player hung up mid-write) surface here; handled by the loop below.
+      s.done.then((_) {}, onError: (_) {});
+      _pending.remove(key); // answered: no longer waiting on the provider
       // The player hanging up (channel change, stop, close) shows up as its socket closing.
       s.listen((_) {}, onDone: () {
         if (stalker && !closed) {
@@ -215,7 +254,7 @@ class TsRelay {
               rr.listen((_) {}).cancel();
             }
           } catch (e) {
-            debugPrint('[relay] $name reconnect failed: $e');
+            debugPrint('[relay] $name reconnect failed: ${_why(e)}');
           }
         }
         if (next == null) break;
@@ -230,10 +269,15 @@ class TsRelay {
         } catch (_) {}
       }
     } catch (e) {
-      if (stalker) debugPrint('[relay] $name: error $e');
+      if (stalker) {
+        // Never print the error's link: it carries a play token.
+        debugPrint(closed
+            ? '[relay] $name: cancelled (you moved on)'
+            : '[relay] $name: error ${e is HttpException ? e.message : e.runtimeType}');
+      }
       // Provider unreachable before anything was sent: report it as a server problem.
       if (!closed && socket == null) {
-        debugPrint('[relay] provider unreachable: $e');
+        debugPrint('[relay] provider unreachable: ${_why(e)}');
         try {
           res.statusCode = HttpStatus.badGateway;
           await res.close();
@@ -241,6 +285,12 @@ class TsRelay {
       }
     } finally {
       shutdown();
+      if (socket == null) {
+        // Never got to streaming (cancelled or failed): make sure the player's request is answered.
+        try {
+          await res.close();
+        } catch (_) {}
+      }
     }
   }
 }
@@ -249,9 +299,13 @@ class TsRelay {
 class _Target {
   String url;
   final Future<String> Function()? refresh;
+  final String? group; // Stalker account: one request at a time
   bool used = false; // a Stalker link is spent once the provider has been asked for it
-  _Target(this.url, this.refresh);
+  _Target(this.url, this.refresh, this.group);
 }
+
+/// An error's reason without any link in it: stream links carry the MAC and a play token.
+String _why(Object e) => '$e'.split(', uri =').first.replaceAll(RegExp(r'https?://\S+'), '<link>');
 
 /// A short name for logs: the channel number from a stream link, never its credentials.
 String _label(String url) {
