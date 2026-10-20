@@ -160,7 +160,7 @@ class PlaybackService {
       final cmd = '${x['cmd'] ?? ''}';
       if (cmd.isEmpty) throw BMError('This title has no portal link saved. Reload the account or reopen its category.');
       final s = StalkerHub.of(acct);
-      if (item.kind == 'live') return s.liveLink(cmd);
+      if (item.kind == 'live') return s.liveLink(cmd, channelId: item.streamId);
       // Movies play from their own command; an episode is its season's command plus the episode number.
       return s.vodLink(cmd, episode: '${x['series'] ?? ''}');
     }

@@ -442,7 +442,29 @@ class StalkerClient {
   }
 
   /// A fresh playable link. Portal links expire within minutes, so ask every time.
-  Future<String> liveLink(String cmd) async {
+  ///
+  /// Some portals list a ready-made link (with an old token) as a channel's command. Handing that
+  /// to create_link comes back with an empty channel number, which their server rejects. For
+  /// those, ask by channel number instead ("ffmpeg http://localhost/ch/<id>_"), which they answer
+  /// properly. Any link that still comes back without a channel number gets that second try too.
+  Future<String> liveLink(String cmd, {String channelId = ''}) async {
+    final byNumber = channelId.isEmpty ? null : 'ffmpeg http://localhost/ch/${channelId}_';
+    final readyMade = byNumber != null && streamUrlOf(cmd) != null && !cmd.contains('localhost');
+    var link = await _createLiveLink(readyMade ? byNumber : cmd, note: readyMade ? 'asked by channel number' : '');
+    if (_noChannel(link) && byNumber != null && !readyMade) {
+      link = await _createLiveLink(byNumber, note: 'second try by channel number');
+    }
+    if (_noChannel(link)) throw BMError('The portal gave a link without a channel number.');
+    return link;
+  }
+
+  /// A play link whose "stream" (channel number) is present but empty.
+  static bool _noChannel(String link) {
+    final q = Uri.tryParse(link)?.queryParameters ?? const <String, String>{};
+    return q.containsKey('stream') && (q['stream'] ?? '').isEmpty;
+  }
+
+  Future<String> _createLiveLink(String cmd, {String note = ''}) async {
     final j = await request({
       'type': 'itv',
       'action': 'create_link',
@@ -465,7 +487,8 @@ class StalkerClient {
     }
     // Shape only, never the query (it carries the MAC and the play token).
     debugPrint('[stalker] new link: ${u.scheme}://${u.host}${u.hasPort ? ':${u.port}' : ''}${u.path} '
-        '(${u.queryParameters.keys.join(',')})');
+        '(${u.queryParameters.keys.join(',')})${note.isEmpty ? '' : ', $note'}'
+        '${_noChannel(link) ? ', NO channel number' : ''}');
     return link;
   }
 

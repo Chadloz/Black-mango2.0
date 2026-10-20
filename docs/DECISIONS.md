@@ -57,6 +57,10 @@ What the movies probe found (October 2026, one German/EU portal)
 - Portal search covers movies and shows.
 - Channel switching on its own is fast (about 1 s, even with the old channel still open). The long waits seen in the app came from requests piling up, which the one-connection fix stops; the wait message now just says the provider is starting the channel.
 
+Ready-made channel links (October 2026)
+- One portal (NukeTM) lists a ready-made play link, with an old token, as each channel's command. Asking create_link with it returns a link with an empty channel number, and the server resets the connection. Asking by channel number instead ("ffmpeg http://localhost/ch/<id>_") gets a proper link that plays (tested on 4 channels). Playing the listed link directly worked only sometimes (509 on others), so it isn't used.
+- So: a command that's already a real link gets asked for by channel number; any link that still comes back without a channel number gets one more try by number.
+
 Dead channels (October 2026)
 - Some of one portal's channels sit on a broken stream server: it answers after ~21 s with no video, and any new link right after gets HTTP 407 (a short lockout). Confirmed outside the app.
 - So a Stalker channel that answers with no video, or with 407, counts as down on that account: the app stops asking that server (more links only extend the lockout) and goes straight to the same channel on another account. It skips that channel on that account for 30 minutes; with no backup anywhere it tries anyway.
