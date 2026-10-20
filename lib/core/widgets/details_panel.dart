@@ -3,6 +3,8 @@ import '../../app/theme.dart';
 import '../services.dart';
 import '../storage/database.dart';
 import '../catalog/details.dart';
+import '../catalog/display_name.dart';
+import 'tag_chips.dart';
 import '../favorites/favorites_service.dart';
 
 /// Right-side info panel for a movie or show: poster, info, Play, and episodes.
@@ -134,10 +136,15 @@ class _DetailsPanelState extends State<DetailsPanel> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 32),
-                        Text(widget.item.name,
+                        Text(displayName(widget.item.name).title,
                             maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: BMColors.text)),
+                        if (displayName(widget.item.name).tags.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: TagChips(displayName(widget.item.name).tags, size: 11, max: 6),
+                          ),
                         const SizedBox(height: 8),
                         if (meta.isNotEmpty) Text(meta, style: const TextStyle(fontSize: 13, color: BMColors.dim)),
                         if (widget.accountName.isNotEmpty)

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../app/nav.dart';
+import '../../app/theme.dart';
+import '../catalog/display_name.dart';
 import '../hotkeys.dart';
 import '../prefs.dart';
 import '../services.dart';
@@ -20,6 +22,35 @@ Future<void> dockToFullPlayer() async {
   await Services.playback.player.pause();
   if (PopOut.active.value) await PopOut.exit();
   if (cur != null) AppNav.index.value = screenFor(cur);
+}
+
+/// The auto-float switch (same as Settings > Float when I switch to another app), as a button
+/// on the full player and on the mini player. Mango when on.
+class AutoFloatToggle extends StatelessWidget {
+  final double size;
+  const AutoFloatToggle({super.key, this.size = 22});
+
+  static bool get isOn => !Prefs.getBool('mini.autoFloat.off');
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: Prefs.changes,
+      builder: (context, _, _) {
+        final on = isOn;
+        return IconButton(
+          tooltip: on
+              ? 'Auto-float is on: the video floats when you switch apps. Click to turn it off.'
+              : 'Auto-float is off. Click to turn it on.',
+          onPressed: () {
+            Prefs.setBool('mini.autoFloat.off', on);
+            Services.playback.showNote(on ? 'Auto-float off' : 'Auto-float on');
+          },
+          icon: Icon(on ? Icons.flip_to_front : Icons.flip_to_back, size: size, color: on ? BMColors.mango : Colors.white70),
+        );
+      },
+    );
+  }
 }
 
 /// Pops out automatically when you click over to another app while something plays.
@@ -59,6 +90,33 @@ class _BlurWatcher with WindowListener {
 /// Pop-out: shrink the whole window into a small always-on-top video window.
 class PopOut {
   static final active = ValueNotifier<bool>(false);
+
+  /// Minimized: the mini player (card or floating window) is a slim bar with the title,
+  /// play/pause and close. No video; the sound keeps playing.
+  static final slim = ValueNotifier<bool>(false);
+  static const _slimSize = Size(380, 52);
+  static const _floatSize = Size(480, 270);
+
+  static Future<void> setSlim(bool v) async {
+    if (slim.value == v) return;
+    slim.value = v;
+    if (!active.value) return; // the in-app card redraws itself
+    try {
+      // Keep the window's bottom-right corner where it is while it changes size.
+      final b = await windowManager.getBounds();
+      final s = v ? _slimSize : _floatSize;
+      if (v) {
+        await windowManager.setAspectRatio(0);
+        await windowManager.setMinimumSize(const Size(260, 44));
+      } else {
+        await windowManager.setMinimumSize(const Size(256, 144));
+      }
+      await windowManager.setBounds(Rect.fromLTWH(b.right - s.width, b.bottom - s.height, s.width, s.height));
+      if (!v) await windowManager.setAspectRatio(16 / 9);
+    } catch (e) {
+      debugPrint('[mini] resize failed: $e');
+    }
+  }
   static Rect? _saved;
   static bool _hooked = false;
 
@@ -96,6 +154,7 @@ class PopOut {
     }
     try {
       _saved = await windowManager.getBounds();
+      slim.value = false; // floating always starts with the video showing
       active.value = true;
       await windowManager.setTitleBarStyle(TitleBarStyle.hidden, windowButtonVisibility: false);
       await windowManager.setMinimumSize(const Size(256, 144));
@@ -123,6 +182,7 @@ class PopOut {
   static Future<void> exit() async {
     if (!active.value) return;
     active.value = false;
+    slim.value = false;
     try {
       await windowManager.setAlwaysOnTop(false);
       try {
@@ -162,7 +222,71 @@ class _MiniLayer extends StatefulWidget {
 }
 
 class _MiniLayerState extends State<_MiniLayer> {
-  static const _w = 340.0, _h = 191.0;
+  static const _w = 340.0, _h = 191.0, _barH = 48.0;
+
+  @override
+  void initState() {
+    super.initState();
+    AppNav.index.addListener(_unslimOnFull);
+    Services.playback.current.addListener(_unslimOnFull);
+  }
+
+  @override
+  void dispose() {
+    AppNav.index.removeListener(_unslimOnFull);
+    Services.playback.current.removeListener(_unslimOnFull);
+    super.dispose();
+  }
+
+  /// Back on the full player, or nothing playing: the next mini player shows the video again.
+  void _unslimOnFull() {
+    final cur = Services.playback.current.value;
+    if (PopOut.active.value) return;
+    if (cur == null || AppNav.index.value == screenFor(cur)) PopOut.slim.value = false;
+  }
+
+  /// Minimized mini player: title, play/pause, close. Sound keeps playing.
+  Widget _slimBar(Item cur, {required bool popped}) {
+    Widget b(IconData icon, String tip, VoidCallback onTap) => IconButton(
+          tooltip: tip,
+          onPressed: onTap,
+          icon: Icon(icon, color: BMColors.text, size: 20),
+        );
+    return Material(
+      color: BMColors.surface,
+      elevation: popped ? 0 : 12,
+      borderRadius: popped ? null : BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        children: [
+          b(Icons.open_in_full, 'Show the video again', () => PopOut.setSlim(false)),
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanStart: popped ? (_) => windowManager.startDragging() : null,
+              onDoubleTap: () => PopOut.setSlim(false),
+              child: Text(
+                displayName(cur.name).title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: BMColors.text, fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+            ),
+          ),
+          StreamBuilder<bool>(
+            stream: Services.playback.player.stream.playing,
+            initialData: Services.playback.player.state.playing,
+            builder: (context, snap) => b(
+              snap.data == true ? Icons.pause : Icons.play_arrow,
+              snap.data == true ? 'Pause' : 'Play',
+              () => Services.playback.player.playOrPause(),
+            ),
+          ),
+          b(Icons.close, 'Close (stops playback)', () => Services.playback.stop()),
+        ],
+      ),
+    );
+  }
   Offset? _pos;
   bool _dragging = false;
   bool _hover = false;
@@ -296,6 +420,8 @@ class _MiniLayerState extends State<_MiniLayer> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
+          const AutoFloatToggle(size: 20),
+          _btn(Icons.minimize, 'Minimize to a slim bar (sound keeps playing)', () => PopOut.setSlim(true)),
           if (popped)
             _btn(Icons.close_fullscreen, 'Back to the full player', () => PopOut.backToFull())
           else ...[
@@ -349,10 +475,13 @@ class _MiniLayerState extends State<_MiniLayer> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge([Services.playback.current, AppNav.index, PopOut.active]),
+      animation: Listenable.merge([Services.playback.current, AppNav.index, PopOut.active, PopOut.slim]),
       builder: (context, _) {
         final cur = Services.playback.current.value;
         if (cur == null) return const SizedBox.shrink();
+
+        // Popped out and minimized: the whole (slim, always-on-top) window is the bar.
+        if (PopOut.active.value && PopOut.slim.value) return _slimBar(cur, popped: true);
 
         // Popped out: the whole (small, always-on-top) window is the video.
         if (PopOut.active.value) {
@@ -386,11 +515,13 @@ class _MiniLayerState extends State<_MiniLayer> {
         // Floating card. Drag it past the window's edge to pop it out over other apps.
         return LayoutBuilder(
           builder: (context, box) {
+            final slim = PopOut.slim.value;
+            final h = slim ? _barH : _h;
             Offset clampIn(Offset o) => Offset(
                   o.dx.clamp(0.0, (box.maxWidth - _w).clamp(0.0, double.infinity)).toDouble(),
-                  o.dy.clamp(0.0, (box.maxHeight - _h).clamp(0.0, double.infinity)).toDouble(),
+                  o.dy.clamp(0.0, (box.maxHeight - h).clamp(0.0, double.infinity)).toDouble(),
                 );
-            final def = Offset(box.maxWidth - _w - 20, box.maxHeight - _h - 20);
+            final def = Offset(box.maxWidth - _w - 20, box.maxHeight - h - 20);
             final raw = _pos ?? def;
             final p = _dragging ? raw : clampIn(raw);
             return Stack(
@@ -399,7 +530,7 @@ class _MiniLayerState extends State<_MiniLayer> {
                   left: p.dx,
                   top: p.dy,
                   width: _w,
-                  height: _h,
+                  height: h,
                   child: MouseRegion(
                     onEnter: (_) => _hoverOn(),
                     onExit: (_) => _hoverOff(),
@@ -413,8 +544,8 @@ class _MiniLayerState extends State<_MiniLayer> {
                         final o = _pos ?? p;
                         final offEdge = o.dx < -_w * 0.4 ||
                             o.dx > box.maxWidth - _w * 0.6 ||
-                            o.dy < -_h * 0.4 ||
-                            o.dy > box.maxHeight - _h * 0.6;
+                            o.dy < -h * 0.4 ||
+                            o.dy > box.maxHeight - h * 0.6;
                         setState(() {
                           _dragging = false;
                           _pos = offEdge ? null : clampIn(o);
@@ -422,7 +553,9 @@ class _MiniLayerState extends State<_MiniLayer> {
                         if (offEdge) PopOut.enter();
                       },
                       onDoubleTap: () => AppNav.index.value = screenFor(cur),
-                      child: Material(
+                      child: slim
+                          ? _slimBar(cur, popped: false)
+                          : Material(
                         elevation: 12,
                         color: Colors.black,
                         borderRadius: BorderRadius.circular(12),

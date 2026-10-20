@@ -8,20 +8,24 @@ class AppLog {
   static final _pathCreds = RegExp(r'(/(?:live|movie|series)/)[^/\s]+/[^/\s]+/');
   static final _queryCreds = RegExp(r'((?:username|password|mac|play_token|token)=)[^&\s;]+', caseSensitive: false);
 
+  /// Hides logins, MACs, and play tokens inside any stream link in [m].
+  static String mask(String m) => m
+      .replaceAllMapped(_pathCreds, (x) => '${x[1]}***/***/')
+      .replaceAllMapped(_queryCreds, (x) => '${x[1]}***');
+
   static void start() {
     final original = debugPrint;
     debugPrint = (String? message, {int? wrapWidth}) {
       if (message != null) add(message);
-      original(message, wrapWidth: wrapWidth);
+      // The Terminal gets the masked line too, so a pasted log never carries a working link.
+      original(message == null ? null : mask(message), wrapWidth: wrapWidth);
     };
   }
 
   static void add(String m) {
     final t = DateTime.now();
     String two(int n) => n.toString().padLeft(2, '0');
-    final clean = m
-        .replaceAllMapped(_pathCreds, (x) => '${x[1]}***/***/')
-        .replaceAllMapped(_queryCreds, (x) => '${x[1]}***');
+    final clean = mask(m);
     _lines.add('${two(t.hour)}:${two(t.minute)}:${two(t.second)} $clean');
     if (_lines.length > _max) _lines.removeRange(0, _lines.length - _max);
   }

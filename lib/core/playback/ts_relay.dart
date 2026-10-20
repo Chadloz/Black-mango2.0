@@ -244,6 +244,7 @@ class TsRelay {
         onResume: (m) => debugPrint('[relay] $name reconnected: $m'),
       );
       var quickEnds = 0;
+      var silentRuns = 0; // reconnects in a row where the server answered but sent nothing
       while (!closed) {
         final started = DateTime.now();
         var bytes = 0;
@@ -275,6 +276,14 @@ class TsRelay {
         debugPrint('[relay] provider ended $name after ${secs.toStringAsFixed(0)}s '
             '(${(bytes / 1e6).toStringAsFixed(1)} MB)${seamless ? '; reconnecting' : ''}');
         if (!seamless) break;
+        // Answering and then sending nothing, three times running: the channel is down here.
+        // Mark it so the player gets a clear "gone" (410) and switches to a backup within seconds.
+        silentRuns = bytes == 0 ? silentRuns + 1 : 0;
+        if (silentRuns >= 3) {
+          t.dead = true;
+          debugPrint('[relay] $name: server keeps answering with no video; treating this channel as down on this account');
+          break;
+        }
         quickEnds = secs < 3 ? quickEnds + 1 : 0;
         if (quickEnds >= 5) {
           debugPrint('[relay] $name keeps dropping; handing it back to the player');

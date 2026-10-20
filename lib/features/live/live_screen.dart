@@ -6,6 +6,8 @@ import '../../app/theme.dart';
 import '../../core/services.dart';
 import '../../core/storage/database.dart';
 import '../../core/widgets/account_picker.dart';
+import '../../core/widgets/tag_chips.dart';
+import '../../core/catalog/display_name.dart';
 import '../../core/widgets/filter_menu.dart';
 import '../../core/widgets/track_menu.dart';
 import '../../core/widgets/player_controls.dart';
@@ -576,7 +578,7 @@ class _PlayerArea extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text.rich(
               TextSpan(children: [
-                TextSpan(text: cur.name, style: const TextStyle(fontWeight: FontWeight.w700, color: BMColors.text)),
+                TextSpan(text: displayName(cur.name).title, style: const TextStyle(fontWeight: FontWeight.w700, color: BMColors.text)),
                 TextSpan(text: '   ${acctNames[cur.accountId] ?? ''}', style: const TextStyle(color: BMColors.mango)),
               ]),
               maxLines: 1,
@@ -657,11 +659,22 @@ class _ChannelRow extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    item.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: active ? BMColors.mango : BMColors.text),
+                  // Clean channel name, with country and quality as small tags ("HBO COMEDY" US HD).
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          displayName(item.name).title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: active ? BMColors.mango : BMColors.text),
+                        ),
+                      ),
+                      if (displayName(item.name).tags.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        TagChips(displayName(item.name).tags, max: 3),
+                      ],
+                    ],
                   ),
                   Text.rich(
                     TextSpan(children: [

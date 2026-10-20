@@ -13,6 +13,8 @@ import '../favorites/favorites_service.dart';
 import '../../app/nav.dart';
 import '../prefs.dart';
 import '../catalog/stalker_groups.dart';
+import '../catalog/display_name.dart';
+import 'tag_chips.dart';
 
 String _fmt(int n) => n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
 
@@ -700,10 +702,11 @@ class _PosterTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dn = displayName(item.name); // clean title + small tags (4K, HDR, DE)
     final fallback = Center(
       child: Padding(
         padding: const EdgeInsets.all(10),
-        child: Text(item.name,
+        child: Text(dn.title,
             textAlign: TextAlign.center, maxLines: 4, overflow: TextOverflow.ellipsis,
             style: const TextStyle(color: BMColors.dim, fontSize: 13)),
       ),
@@ -737,7 +740,7 @@ class _PosterTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(item.name,
+                child: Text(dn.title,
                     maxLines: 2, overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: active ? BMColors.mango : BMColors.text)),
               ),
@@ -750,6 +753,7 @@ class _PosterTile extends StatelessWidget {
               ),
             ],
           ),
+          if (dn.tags.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: TagChips(dn.tags, max: 3)),
           if (accountName.isNotEmpty)
             Text(accountName,
                 maxLines: 1, overflow: TextOverflow.ellipsis,

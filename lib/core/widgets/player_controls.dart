@@ -172,6 +172,7 @@ class _BMControlsState extends State<BMControls> {
           TransportButtons(full: true, width: box.maxWidth),
           const SizedBox(width: 4),
           Expanded(child: _live ? _liveBadge() : _seekBar()),
+          if (!fs && !narrow) const AutoFloatToggle(), // float automatically when you switch apps: on/off
           if (!fs && !narrow)
             IconButton(
               tooltip: 'Float over other apps (P)',

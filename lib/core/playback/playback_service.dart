@@ -313,6 +313,7 @@ class PlaybackService {
     await _setStart(item.kind == 'live' ? null : resumeAt);
     await _applyTrackPrefs(item);
     TsRelay.cancelPending(); // requests for what you walked away from can't hold a connection slot
+    _openedAt = DateTime.now();
     await player.open(Media(_wrap(item, url), httpHeaders: _headersFor(item)), play: autoplay);
     if (item.kind == 'live' && _stalkerKnown(item)) {
       // Normal Stalker starts take 3-5 s. Longer means the server is still holding your last channel.
@@ -889,9 +890,9 @@ class PlaybackService {
       return;
     }
     if (item.kind != 'live') return;
-    // Stalker said this channel is dead on this account (410 from the relay, or a 407 lockout):
+    // The relay found this channel dead on this account (410: no video, silence, or a Stalker 407 lockout):
     // remember it for 30 minutes and go straight to a backup instead of asking that server again.
-    if (_stalkerKnown(item) && was4xx && (code == 410 || code == 407)) {
+    if (was4xx && (code == 410 || (code == 407 && _stalkerKnown(item)))) {
       _deadUntil['${item.accountId}|${item.streamId}'] = DateTime.now().add(const Duration(minutes: 30));
       debugPrint('[stalker] ${item.name} is down on this account; skipping it there for 30 minutes');
       _failoverOrGiveUp(item, "This channel isn't working on this account right now. Try again in 30 minutes, or pick another channel.");
@@ -1003,6 +1004,7 @@ class PlaybackService {
   final List<DateTime> _longReconnects = []; // reconnects in the last 10 minutes (stuck-loop check)
   int _noVideoReconnects = 0; // reconnects in a row that never brought video back
   final List<DateTime> _stalls = []; // stalls on this channel in the last 5 minutes
+  DateTime _openedAt = DateTime.now(); // when the current stream was last opened or reopened
   int _smoothMinutes = 0; // minutes of live watching since the last stall
 
   /// A short note on the player for a few seconds ("Extra buffer for this channel: 8 s").
@@ -1015,13 +1017,20 @@ class PlaybackService {
     _noteTimer = Timer(const Duration(seconds: 5), () => playerNote.value = null);
   }
 
+  /// A short note on the player for a few seconds (for buttons like the auto-float switch).
+  void showNote(String msg) => _note(msg);
+
   /// The picture stopped to rebuffer. Two of those within 5 minutes on a live channel earns it
   /// 3 more seconds of cushion (up to 15), remembered for that channel.
   void _onStall() {
     final cur = current.value;
     if (cur == null || cur.kind != 'live' || !_started || _reconnectPending) return;
     final now = DateTime.now();
+    // The first seconds of a channel (or of a reconnect) always settle in: not a stall.
+    if (now.difference(_openedAt) < const Duration(seconds: 10)) return;
     _smoothMinutes = 0;
+    // Back-to-back hiccups count as one stall.
+    if (_stalls.isNotEmpty && now.difference(_stalls.last) < const Duration(seconds: 10)) return;
     _stalls.removeWhere((t) => now.difference(t) > const Duration(minutes: 5));
     _stalls.add(now);
     if (_stalls.length < 2) return;
@@ -1072,6 +1081,7 @@ class PlaybackService {
         debugPrint('[stalker] could not get a fresh link: $e');
       }
     }
+    _openedAt = DateTime.now();
     await player.open(Media(_wrap(item, url), httpHeaders: _headersFor(item)));
   }
 

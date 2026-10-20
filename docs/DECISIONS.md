@@ -18,6 +18,18 @@ Why things are the way they are. Newest first within each section. No portal URL
 - Extra buffer for flaky channels: a live channel that stalls twice within 5 minutes gets 3 more seconds of cushion, up to 15 seconds in all (your "Buffer before a channel starts" setting plus its extra). It's remembered per channel on each account, even after restarting, and takes effect at the next rebuffer. After 30 minutes of smooth watching it steps back down by 3. A small note shows on the player for a few seconds when it goes up. Settings has a reset.
 - Stuck loops: on top of the existing 8-reconnects-a-minute limit, a channel that reconnects 12 times in 10 minutes, or never shows video across 3 reconnects in a row, switches to the same channel on another account.
 
+## Polish (October 2026)
+
+- Clean names: provider titles and channel names show as a clean name plus small tags. Quality and language tags (4K, HDR, FHD, HD, RAW, DE, MULTI, US...) come off the ends and off "US|"-style prefixes; symbols and emoji (◉, ✨, ᴿᴬᵂ) go. Tags show under the title on posters and the details page, and next to channel names in Live TV. Capitalization stays as the provider wrote it. Search and sorting still use the raw name.
+- Extra buffer counting ignores the first 10 seconds after a channel opens or reconnects, and back-to-back hiccups (within 10 s) count as one stall.
+- A channel that answers and then sends nothing three times in a row is treated as down on that account (any account type): straight to a backup, skipped there for 30 minutes.
+- Logs never show a working stream link: logins, MACs, and play tokens are masked in the Terminal as well as in the copied log.
+
+## Mini player (October 2026)
+
+- Minimize: a button on the mini player shrinks it to a slim bar with the title, play/pause, and close. No video; the sound keeps playing. Works for the in-app card and the floating window (which keeps its bottom-right corner in place). Going back to the full player, or stopping, shows the video again next time.
+- Auto-float switch: a button on both the full player and the mini player turns "float when I switch apps" on or off (mango when on). It's the same setting as in Settings.
+
 ## Layout (October 2026)
 
 - Movies, Shows, and Live TV stay side by side (list left, details or video right) down to about 620 px wide; they stack only in tiny windows. In a narrow details panel the poster stays beside the title and the text wraps.
