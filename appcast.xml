@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Black Mango</title>
+    <item>
+      <title>Black Mango 2.0.0-beta.1</title>
+      <pubDate>Tue, 20 Oct 2026 13:51:24 +0000</pubDate>
+      <sparkle:version>1</sparkle:version>
+      <sparkle:shortVersionString>2.0.0-beta.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<h2>Black Mango 2.0, test build 1</h2>
+<p>The first test build of the new Black Mango, rebuilt from the ground up on a faster video engine.</p>
+<h3>What&#x27;s in it</h3>
+<ul>
+<li>Live TV, Movies and Shows from Xtream, M3U, and Stalker (MAG) portal accounts</li>
+<li>Smart paste: paste your provider&#x27;s message and the account fills itself in</li>
+<li>Failover: if a channel, movie or episode won&#x27;t play, it switches to the same one on another of your accounts</li>
+<li>Smoother live TV: seamless reconnects, extra buffer for channels that stutter, and quick switching away from dead channels</li>
+<li>A mini player that floats over other apps, with a slim minimized bar</li>
+<li>Clean titles and channel names, with small quality and language tags</li>
+<li>Remembers your audio and subtitle choices for each show</li>
+<li>Backup and restore for accounts, favorites, history and settings</li>
+<li>Automatic updates</li>
+</ul>
+<h3>Good to know</h3>
+<ul>
+<li>Mac only for now. Windows is coming.</li>
+<li>This is a test build. If something misbehaves, send the log from <b>Settings &gt; Debug Log &gt; Copy recent</b>.</li>
+</ul>]]></description>
+      <enclosure url="https://github.com/Chadloz/Black-mango2.0/releases/download/v2.0.0-beta.1/Black-Mango-2.0.0-beta.1.zip" length="41224332" type="application/octet-stream" sparkle:edSignature="eGG1e/rO52FrQyUqNbtU6I8MUXFQnkUkAMYyjTAJAPpQfVx6WHeOHRaFRCek1rpOwjCmn4kwe/KIg0ydjyfSDQ=="/>
+    </item>
+  </channel>
+</rss>
