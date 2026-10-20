@@ -30,15 +30,19 @@ class PlayerPanel extends StatelessWidget {
                 Positioned(
                   top: 12,
                   left: 12,
-                  child: ValueListenableBuilder<String?>(
-                    valueListenable: Services.playback.reconnecting,
-                    builder: (context, msg, _) => msg == null
-                        ? const SizedBox.shrink()
-                        : Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
-                            child: Text(msg, style: const TextStyle(color: BMColors.mango, fontWeight: FontWeight.w600)),
-                          ),
+                  // Reconnect status first; otherwise a short note (like a channel getting extra buffer).
+                  child: ListenableBuilder(
+                    listenable: Listenable.merge([Services.playback.reconnecting, Services.playback.playerNote]),
+                    builder: (context, _) {
+                      final msg = Services.playback.reconnecting.value ?? Services.playback.playerNote.value;
+                      return msg == null
+                          ? const SizedBox.shrink()
+                          : Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
+                              child: Text(msg, style: const TextStyle(color: BMColors.mango, fontWeight: FontWeight.w600)),
+                            );
+                    },
                   ),
                 ),
                 Positioned(

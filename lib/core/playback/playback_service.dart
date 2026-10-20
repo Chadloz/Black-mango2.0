@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'track_memory.dart';
 import 'vod_failover.dart';
 import 'ts_relay.dart';
+import 'live_buffer.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../history/history_service.dart';
@@ -38,6 +39,8 @@ class PlaybackService {
     _applyStartupPrefs();
     // Stalker portals drop sessions that stop checking in: check in every 2 minutes while playing.
     Timer.periodic(const Duration(minutes: 2), (_) => _stalkerKeepAlive());
+    // Every minute of smooth live watching counts toward easing a channel's extra buffer back down.
+    Timer.periodic(const Duration(minutes: 1), (_) => _bufferTick());
     // Save movie/episode progress every 10 seconds while playing.
     Timer.periodic(const Duration(seconds: 10), (_) {
       final cur = current.value;
@@ -94,10 +97,12 @@ class PlaybackService {
     });
     // Clear the reconnect badge once video is flowing again.
     player.stream.buffering.listen((b) {
+      if (b) _onStall();
       if (!b && player.state.playing && !_reconnectPending) {
         reconnecting.value = null;
         _openFailsInRow = 0;
         _busyInRow = 0;
+        _noVideoReconnects = 0; // video is flowing again
       }
     });
   }
@@ -293,6 +298,10 @@ class PlaybackService {
     await _saveProgress();
     final resumeAt = item.kind == 'live' ? null : await history?.resumePosition(item);
     _recentReconnects.clear();
+    _longReconnects.clear();
+    _noVideoReconnects = 0;
+    _stalls.clear();
+    _smoothMinutes = 0;
     _reconnectPending = false;
     _started = false;
     _startRetries = 0;
@@ -489,7 +498,11 @@ class PlaybackService {
     if (mem.isNotEmpty) debugPrint('[tracks] using your saved choice for this show: $mem');
     // Live buffer: hold a few seconds in reserve before starting a channel, so short
     // provider stalls are absorbed instead of becoming skips. Movies don't need it.
-    final buf = item.kind == 'live' ? (Prefs.getInt('live.buffer') ?? 3) : 0;
+    // A channel that has proved flaky gets its own bigger cushion (see LiveBuffer).
+    final buf = item.kind == 'live' ? LiveBuffer.total(item) : 0;
+    if (item.kind == 'live' && LiveBuffer.extra(item) > 0) {
+      debugPrint('[buffer] ${item.name}: using ${buf}s (this channel has extra buffer)');
+    }
     await np.setProperty('cache-pause-initial', buf > 0 ? 'yes' : 'no');
     await np.setProperty('cache-pause-wait', '${buf > 0 ? buf : 1}');
   }
@@ -932,6 +945,20 @@ class PlaybackService {
       _failoverOrGiveUp(item, 'Stream unstable. Pick it again or try another channel.');
       return;
     }
+    // Stuck loops the per-minute limit misses: a channel that keeps dropping over a longer
+    // stretch, or one that never shows video across 3 reconnects. Both go to a backup.
+    _longReconnects.removeWhere((t) => now.difference(t) > const Duration(minutes: 10));
+    if (_longReconnects.length >= 12 || _noVideoReconnects >= 3) {
+      debugPrint(_noVideoReconnects >= 3
+          ? '[playback] ${item.name}: 3 reconnects without video; switching to a backup'
+          : '[playback] ${item.name}: 12 reconnects in 10 minutes; switching to a backup');
+      _longReconnects.clear();
+      _noVideoReconnects = 0;
+      _failoverOrGiveUp(item, 'This channel keeps dropping. Try again later, or pick another channel.');
+      return;
+    }
+    _longReconnects.add(now);
+    _noVideoReconnects++;
     _recentReconnects.add(now);
     _reconnectPending = true;
     reconnecting.value = 'Reconnecting (${_recentReconnects.length}/$_maxReconnects)...';
@@ -970,6 +997,62 @@ class PlaybackService {
       : TsRelay.wrap(url);
 
   int _playSeq = 0; // bumps on every play(), so a flip you moved past can bow out
+
+  // ---------- Smoother live TV ----------
+
+  final List<DateTime> _longReconnects = []; // reconnects in the last 10 minutes (stuck-loop check)
+  int _noVideoReconnects = 0; // reconnects in a row that never brought video back
+  final List<DateTime> _stalls = []; // stalls on this channel in the last 5 minutes
+  int _smoothMinutes = 0; // minutes of live watching since the last stall
+
+  /// A short note on the player for a few seconds ("Extra buffer for this channel: 8 s").
+  final playerNote = ValueNotifier<String?>(null);
+  Timer? _noteTimer;
+
+  void _note(String msg) {
+    playerNote.value = msg;
+    _noteTimer?.cancel();
+    _noteTimer = Timer(const Duration(seconds: 5), () => playerNote.value = null);
+  }
+
+  /// The picture stopped to rebuffer. Two of those within 5 minutes on a live channel earns it
+  /// 3 more seconds of cushion (up to 15), remembered for that channel.
+  void _onStall() {
+    final cur = current.value;
+    if (cur == null || cur.kind != 'live' || !_started || _reconnectPending) return;
+    final now = DateTime.now();
+    _smoothMinutes = 0;
+    _stalls.removeWhere((t) => now.difference(t) > const Duration(minutes: 5));
+    _stalls.add(now);
+    if (_stalls.length < 2) return;
+    _stalls.clear();
+    if (LiveBuffer.total(cur) >= LiveBuffer.maxTotal) return;
+    LiveBuffer.setExtra(cur, LiveBuffer.extra(cur) + LiveBuffer.step).then((_) async {
+      final after = LiveBuffer.total(cur);
+      debugPrint('[buffer] ${cur.name} stalled twice in 5 minutes; this channel now gets ${after}s of buffer');
+      _note('Extra buffer for this channel: $after s');
+      final np = player.platform;
+      if (np is NativePlayer && current.value?.id == cur.id) {
+        try {
+          await np.setProperty('cache-pause-wait', '$after'); // takes effect at the next rebuffer
+        } catch (_) {}
+      }
+    });
+  }
+
+  /// Once a minute: 30 minutes of smooth live watching takes a channel's extra buffer down a step.
+  void _bufferTick() {
+    final cur = current.value;
+    if (cur == null || cur.kind != 'live' || !_started || !player.state.playing || player.state.buffering) return;
+    _smoothMinutes++;
+    if (_smoothMinutes < 30) return;
+    _smoothMinutes = 0;
+    final extra = LiveBuffer.extra(cur);
+    if (extra <= 0) return;
+    LiveBuffer.setExtra(cur, extra - LiveBuffer.step).then((_) {
+      debugPrint('[buffer] ${cur.name} played smoothly for 30 minutes; down to ${LiveBuffer.total(cur)}s');
+    });
+  }
 
   /// Stalker channels found dead on an account ('account|stream' -> until when).
   final _deadUntil = <String, DateTime>{};

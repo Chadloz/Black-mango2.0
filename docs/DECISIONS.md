@@ -13,6 +13,11 @@ Why things are the way they are. Newest first within each section. No portal URL
   python3 "$(ls -t ~/Downloads/NAME*.py | head -1)"
 - Development chats live in the Black Mango Project so later sessions can search them. This file is the short version.
 
+## Smoother live TV (October 2026)
+
+- Extra buffer for flaky channels: a live channel that stalls twice within 5 minutes gets 3 more seconds of cushion, up to 15 seconds in all (your "Buffer before a channel starts" setting plus its extra). It's remembered per channel on each account, even after restarting, and takes effect at the next rebuffer. After 30 minutes of smooth watching it steps back down by 3. A small note shows on the player for a few seconds when it goes up. Settings has a reset.
+- Stuck loops: on top of the existing 8-reconnects-a-minute limit, a channel that reconnects 12 times in 10 minutes, or never shows video across 3 reconnects in a row, switches to the same channel on another account.
+
 ## Layout (October 2026)
 
 - Movies, Shows, and Live TV stay side by side (list left, details or video right) down to about 620 px wide; they stack only in tiny windows. In a narrow details panel the poster stays beside the title and the text wraps.

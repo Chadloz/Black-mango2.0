@@ -8,6 +8,7 @@ import '../../core/app_log.dart';
 import '../../core/hotkeys.dart';
 import '../../core/backup.dart';
 import '../../core/playback/still_watching.dart';
+import '../../core/playback/live_buffer.dart';
 
 const _langOptions = [
   ('', 'Automatic'),
@@ -200,6 +201,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
           sub: 'Holds a few seconds in reserve so short hiccups from the provider don\'t become skips. Channels take that much longer to start. Applies to the next channel you open.',
+        ),
+        _row(
+          'Extra buffer for flaky channels',
+          OutlinedButton(
+            onPressed: LiveBuffer.count() == 0
+                ? null
+                : () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    await LiveBuffer.resetAll();
+                    if (!mounted) return;
+                    setState(() {});
+                    messenger.showSnackBar(const SnackBar(content: Text('Every channel is back to your normal buffer.')));
+                  },
+            child: Text(LiveBuffer.count() == 0 ? 'None yet' : 'Reset (${LiveBuffer.count()})'),
+          ),
+          sub: 'A channel that stalls twice in 5 minutes gets 3 more seconds of cushion (up to 15), remembered for that channel. After 30 smooth minutes it steps back down. Reset puts every channel back to your normal buffer.',
         ),
         _section('LIVE TV AUDIO'),
         _row(
