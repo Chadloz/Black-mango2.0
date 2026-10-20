@@ -251,6 +251,18 @@ class PlaybackService {
     }
     handedOff.value = false;
     _triedAccounts.add(item.accountId);
+    // Found dead on this account in the last 30 minutes: go straight to a backup without asking
+    // its server again (asking again only extends a lockout). No backup anywhere: try it anyway.
+    if (!isFailover && item.kind == 'live' && _isDead(item) && catalog != null) {
+      final alts = await catalog!.failoverCandidates(item, _triedAccounts);
+      if (alts.isNotEmpty) {
+        debugPrint('[stalker] ${item.name} was down on this account recently; going straight to a backup');
+        current.value = item;
+        reconnecting.value = 'Not working on this account right now, finding a backup...';
+        _failoverOrGiveUp(item, "This channel isn't working on this account right now.");
+        return;
+      }
+    }
     final String url;
     try {
       url = await urlFor(item);
@@ -864,6 +876,14 @@ class PlaybackService {
       return;
     }
     if (item.kind != 'live') return;
+    // Stalker said this channel is dead on this account (410 from the relay, or a 407 lockout):
+    // remember it for 30 minutes and go straight to a backup instead of asking that server again.
+    if (_stalkerKnown(item) && was4xx && (code == 410 || code == 407)) {
+      _deadUntil['${item.accountId}|${item.streamId}'] = DateTime.now().add(const Duration(minutes: 30));
+      debugPrint('[stalker] ${item.name} is down on this account; skipping it there for 30 minutes');
+      _failoverOrGiveUp(item, "This channel isn't working on this account right now. Try again in 30 minutes, or pick another channel.");
+      return;
+    }
     // Never got going: one retry (covers one-connection-limit providers), then give up clearly.
     if (!_started) {
       // A 403 usually means our old connection is still open, so be patient before failing over.
@@ -874,7 +894,7 @@ class PlaybackService {
         _failoverOrGiveUp(
             item,
             stalker
-                ? "The provider didn't free up your connection. Try again in a minute, or pick another channel."
+                ? "This channel didn't start on this account. Try again in a minute, or pick another channel."
                 : just403
                     ? 'This account is already in use (one connection at a time). Close VLC or other devices using it, then try again.'
                     : "This channel isn't working right now. Try another one.");
@@ -950,6 +970,14 @@ class PlaybackService {
       : TsRelay.wrap(url);
 
   int _playSeq = 0; // bumps on every play(), so a flip you moved past can bow out
+
+  /// Stalker channels found dead on an account ('account|stream' -> until when).
+  final _deadUntil = <String, DateTime>{};
+
+  bool _isDead(Item item) {
+    final until = _deadUntil['${item.accountId}|${item.streamId}'];
+    return until != null && DateTime.now().isBefore(until);
+  }
 
   /// Reopens a stream. Stalker links expire within minutes, so ask for a fresh one first.
   Future<void> _reopen(Item item, String url) async {

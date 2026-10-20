@@ -80,6 +80,13 @@ class TsRelay {
     }
     final stalker = t.refresh != null;
     final name = _label(t.url);
+    if (t.dead) {
+      // Already proved dead here: don't ask its server again (that only extends a lockout).
+      // 410 tells the player it's gone, so playback switches to a backup.
+      res.statusCode = 410;
+      await res.close();
+      return;
+    }
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 12)
       ..autoUncompress = false;
@@ -153,7 +160,8 @@ class TsRelay {
       }
       final began = DateTime.now();
       // A busy Stalker server can sit on a request for ~45 s before saying no (509): stop at 55.
-      final r = stalker ? await up.close().timeout(const Duration(seconds: 55)) : await up.close();
+      // A Stalker channel that hasn't answered within 12 s counts as down on this account.
+      final r = stalker ? await up.close().timeout(_stalkerStart) : await up.close();
       if (stalker) {
         // Diagnostics for Stalker: what the stream server answered (never the link itself).
         final hops = r.redirects.isEmpty ? '' : ', redirected to ${r.redirects.last.location.host}';
@@ -166,6 +174,15 @@ class TsRelay {
 
     try {
       var r = await open();
+      if (stalker && r.statusCode == 407) {
+        t.dead = true;
+        debugPrint('[relay] $name: locked out (HTTP 407); treating this channel as down on this account');
+        r.listen((_) {}).cancel();
+        res.statusCode = 410;
+        await res.close();
+        shutdown();
+        return;
+      }
       res.statusCode = r.statusCode;
       res.reasonPhrase = r.reasonPhrase;
       for (final h in const ['content-type', 'content-range', 'accept-ranges']) {
@@ -178,6 +195,28 @@ class TsRelay {
         await res.close();
         shutdown();
         return;
+      }
+      // Stalker: some channels answer and then send nothing at all. Wait for the first video
+      // before telling the player the stream is good, so a dead channel fails fast and cleanly.
+      Stream<List<int>> src = r;
+      if (stalker) {
+        final it = StreamIterator<List<int>>(r);
+        // Whatever is left of the 12 s start window (at least a second) for the first video.
+        var left = _stalkerStart - DateTime.now().difference(asked);
+        if (left < const Duration(seconds: 1)) left = const Duration(seconds: 1);
+        final got = await it.moveNext().timeout(left, onTimeout: () => false);
+        if (!got || closed) {
+          if (!closed) {
+            t.dead = true;
+            debugPrint('[relay] $name: server answered but sent no video; treating this channel as down on this account');
+            res.statusCode = 410;
+            await res.close();
+          }
+          await it.cancel();
+          shutdown();
+          return;
+        }
+        src = _startingWith(it.current, it);
       }
       res.persistentConnection = false;
       final seamless = r.contentLength < 0; // live streams have no fixed length
@@ -211,7 +250,7 @@ class TsRelay {
         var pending = 0;
         try {
           // A provider that goes silent for 8 seconds counts as a hang-up.
-          await for (final chunk in r.timeout(const Duration(seconds: 8))) {
+          await for (final chunk in src.timeout(const Duration(seconds: 8))) {
             if (closed) break;
             if (stalker && sentTotal == 0 && bytes == 0) {
               debugPrint('[relay] $name: first data after ${DateTime.now().difference(asked).inMilliseconds} ms');
@@ -252,6 +291,11 @@ class TsRelay {
             } else {
               debugPrint('[relay] $name reconnect refused (HTTP ${rr.statusCode})');
               rr.listen((_) {}).cancel();
+              if (stalker && rr.statusCode == 407) {
+                // Locked out: more links only extend it. Hand back to playback for a backup.
+                t.dead = true;
+                break;
+              }
             }
           } catch (e) {
             debugPrint('[relay] $name reconnect failed: ${_why(e)}');
@@ -260,6 +304,7 @@ class TsRelay {
         if (next == null) break;
         filter.markReconnect();
         r = next;
+        src = next;
       }
       if (!closed) {
         final rest = filter.flush();
@@ -277,9 +322,16 @@ class TsRelay {
       }
       // Provider unreachable before anything was sent: report it as a server problem.
       if (!closed && socket == null) {
-        debugPrint('[relay] provider unreachable: ${_why(e)}');
+        final noAnswer = stalker && e is TimeoutException;
+        if (noAnswer) {
+          // Nothing within 12 s: down on this account, same as no video or a 407 (410 to the player).
+          t.dead = true;
+          debugPrint('[relay] $name: no answer within 12 s; treating this channel as down on this account');
+        } else {
+          debugPrint('[relay] provider unreachable: ${_why(e)}');
+        }
         try {
-          res.statusCode = HttpStatus.badGateway;
+          res.statusCode = noAnswer ? 410 : HttpStatus.badGateway;
           await res.close();
         } catch (_) {}
       }
@@ -301,7 +353,19 @@ class _Target {
   final Future<String> Function()? refresh;
   final String? group; // Stalker account: one request at a time
   bool used = false; // a Stalker link is spent once the provider has been asked for it
+  bool dead = false; // Stalker: this channel proved dead on this account (no video, or a 407 lockout)
   _Target(this.url, this.refresh, this.group);
+}
+
+/// How long a Stalker channel gets to answer and send its first video before it counts as down.
+const _stalkerStart = Duration(seconds: 12);
+
+/// [first], then the rest of [it]: a stream we already peeked into.
+Stream<List<int>> _startingWith(List<int> first, StreamIterator<List<int>> it) async* {
+  yield first;
+  while (await it.moveNext()) {
+    yield it.current;
+  }
 }
 
 /// An error's reason without any link in it: stream links carry the MAC and a play token.

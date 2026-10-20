@@ -300,8 +300,8 @@ class _LiveScreenState extends State<LiveScreen> {
               ],
             ),
           );
-          // Wide window: guide on the left, video fills the rest.
-          if (box.maxWidth >= 800) {
+          // Guide on the left, video on the right, until it truly can't fit; stack only in tiny windows.
+          if (box.maxWidth >= 620) {
             // Playing: slimmer guide so the video gets the room. Idle: the guide takes it all.
             final maxGuide = max(260.0, box.maxWidth - 320);
             final listW = cur == null

@@ -12,6 +12,7 @@ import 'details_panel.dart';
 import '../favorites/favorites_service.dart';
 import '../../app/nav.dart';
 import '../prefs.dart';
+import '../catalog/stalker_groups.dart';
 
 String _fmt(int n) => n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
 
@@ -64,9 +65,10 @@ class _PosterBrowserState extends State<PosterBrowser> {
   double _rowExtent = 300;
   // Stalker: when one Stalker account is picked, browse by the portal's own categories.
   Map<String, Account> _acctObjs = {};
-  List<(String, String)> _cats = []; // (id, title) for _catAcct
+  List<StalkerGroup> _groups = []; // general groups of the portal's categories, for _catAcct
   String? _catAcct;
-  String? _catId;
+  String? _groupId; // stalkerEverythingId, or a group's id
+  int _groupGen = 0; // bumps when you pick another group, so an older group stops loading
   String? _vodStatus; // "Loading DE ✨ KINO (3/31)..." while a category or portal search runs
   Timer? _vodDebounce;
 
@@ -105,14 +107,20 @@ class _PosterBrowserState extends State<PosterBrowser> {
   String? get _stalkerAcct =>
       _accounts.length == 1 && _acctObjs[_accounts.first]?.type == 'stalker' ? _accounts.first : null;
 
-  String? get _catTitle {
-    for (final c in _cats) {
-      if (c.$1 == _catId) return c.$2;
+  StalkerGroup? get _group {
+    for (final g in _groups) {
+      if (g.id == _groupId) return g;
     }
     return null;
   }
 
-  String _lastCatKey(String acctId) => 'acct.$acctId.stalkerlast.${widget.kind}';
+  /// The portal category titles to show: the open group's, or null for everything loaded so far.
+  Set<String>? get _groupTitles {
+    final g = _group;
+    return g == null ? null : {for (final c in g.cats) c.$2};
+  }
+
+  String _lastGroupKey(String acctId) => 'acct.$acctId.stalkergroup.${widget.kind}';
 
   void _onVodChanged() {
     _vodDebounce?.cancel();
@@ -125,35 +133,38 @@ class _PosterBrowserState extends State<PosterBrowser> {
     if (mounted) setState(() => _vodStatus = Services.catalog.vodStatus.value);
   }
 
-  /// One Stalker account picked: get its categories and open the last one you used there.
+  /// One Stalker account picked: sort its categories into general groups and open the last
+  /// group you used there (first time: the first group in the menu).
   Future<void> _syncStalker() async {
     final acctId = _stalkerAcct;
     if (acctId == null) {
       if (_catAcct != null) {
         setState(() {
           _catAcct = null;
-          _cats = [];
-          _catId = null;
+          _groups = [];
+          _groupId = null;
         });
         _reload();
       }
       return;
     }
-    if (_catAcct == acctId && _cats.isNotEmpty) return;
+    if (_catAcct == acctId && _groups.isNotEmpty) return;
     final a = _acctObjs[acctId];
     if (a == null) return;
     try {
-      final cats = await Services.catalog.stalkerCategories(a, widget.kind);
+      final groups = stalkerGroups(await Services.catalog.stalkerCategories(a, widget.kind));
       if (!mounted || _stalkerAcct != acctId) return;
-      final last = Prefs.getStr(_lastCatKey(acctId));
-      final pick = cats.any((x) => x.$1 == last) ? last : (cats.isEmpty ? null : cats.first.$1);
+      final last = Prefs.getStr(_lastGroupKey(acctId));
+      final pick = (last == stalkerEverythingId || groups.any((g) => g.id == last))
+          ? last!
+          : (groups.isEmpty ? stalkerEverythingId : groups.first.id);
       setState(() {
         _catAcct = acctId;
-        _cats = cats;
-        _catId = pick;
+        _groups = groups;
+        _groupId = pick;
       });
       _reload();
-      if (pick != null) _openCat(pick);
+      _openGroup(pick);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not load the categories: $e')));
@@ -161,31 +172,40 @@ class _PosterBrowserState extends State<PosterBrowser> {
     }
   }
 
-  Future<void> _openCat(String id, {bool force = false}) async {
+  /// Loads every portal category in the group, one after another (each shows its first
+  /// titles right away). "Everything loaded so far" loads nothing.
+  Future<void> _openGroup(String id, {bool force = false}) async {
     final acctId = _stalkerAcct;
     final a = acctId == null ? null : _acctObjs[acctId];
     if (a == null) return;
-    var title = '';
-    for (final x in _cats) {
-      if (x.$1 == id) title = x.$2;
+    Prefs.setStr(_lastGroupKey(a.id), id);
+    final gen = ++_groupGen;
+    StalkerGroup? g;
+    for (final x in _groups) {
+      if (x.id == id) g = x;
     }
-    Prefs.setStr(_lastCatKey(a.id), id);
-    try {
-      await Services.catalog.openStalkerCategory(a, widget.kind, id, title, force: force);
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not load $title: $e')));
+    if (g == null) return;
+    for (var i = 0; i < g.cats.length; i++) {
+      if (gen != _groupGen || !mounted) return; // you picked another group
+      final c = g.cats[i];
+      final label = g.cats.length > 1 ? '${g.label}, part ${i + 1} of ${g.cats.length}' : g.label;
+      try {
+        await Services.catalog.openStalkerCategory(a, widget.kind, c.$1, c.$2, force: force, label: label);
+      } catch (e) {
+        debugPrint('[stalker] ${g.label}: one of its categories did not load: $e');
+      }
     }
   }
 
   Future<void> _pickCategory() async {
     final picked = await showDialog<String>(
       context: context,
-      builder: (_) => _CategoryPicker(cats: _cats, selected: _catId),
+      builder: (_) => _GroupPicker(groups: _groups, selected: _groupId),
     );
     if (picked == null || !mounted) return;
-    setState(() => _catId = picked);
+    setState(() => _groupId = picked);
     _reload();
-    _openCat(picked);
+    _openGroup(picked);
   }
 
   /// Enter in the search box: also ask the Stalker portals in scope (they search everything,
@@ -266,12 +286,12 @@ class _PosterBrowserState extends State<PosterBrowser> {
     final cat = Services.catalog;
     final k = widget.kind;
     // Stalker account picked: show its open category. A search looks across all of its cached titles.
-    final category = (_stalkerAcct != null && _query.trim().isEmpty) ? _catTitle : null;
-    final countryOpts = await cat.countries(k, accountIds: _accounts, category: category);
-    final langOpts = await cat.languages(k, accountIds: _accounts, category: category);
+    final categories = (_stalkerAcct != null && _query.trim().isEmpty) ? _groupTitles : null;
+    final countryOpts = await cat.countries(k, accountIds: _accounts, categories: categories);
+    final langOpts = await cat.languages(k, accountIds: _accounts, categories: categories);
     final countries = _countries.where(countryOpts.contains).toSet();
     final languages = _languages.where(langOpts.contains).toSet();
-    final genres = await cat.genres(k, accountIds: _accounts, countries: countries, languages: languages, category: category);
+    final genres = await cat.genres(k, accountIds: _accounts, countries: countries, languages: languages, categories: categories);
     final genre = (_genre != null && genres.contains(_genre)) ? _genre : null;
     final raw = await cat.items(k,
         accountIds: _accounts,
@@ -280,7 +300,7 @@ class _PosterBrowserState extends State<PosterBrowser> {
         languages: languages,
         query: _query,
         byName: true,
-        category: category);
+        categories: categories);
     // A Stalker title can sit in more than one category: show it once.
     final seen = <String>{};
     final items = raw.where((it) => seen.add(favKey(it))).toList();
@@ -339,7 +359,8 @@ class _PosterBrowserState extends State<PosterBrowser> {
               onBackToVideo: playing ? () => setState(() => _showVideo = true) : null,
             );
           }
-          if (box.maxWidth >= 800) {
+          // Side by side until it truly can't fit (list 300 + details 320); stack only in tiny windows.
+          if (box.maxWidth >= 620) {
             final maxGuide = max(300.0, box.maxWidth - 320);
             final listW = (_guideW ?? (box.maxWidth * 0.32).clamp(320.0, 460.0).toDouble()).clamp(300.0, maxGuide).toDouble();
             return Row(
@@ -437,29 +458,26 @@ class _PosterBrowserState extends State<PosterBrowser> {
         _reload();
       },
     );
-    final catTitle = _catTitle;
-    // Stalker category button + reload. In the stacked (narrow) toolbar it stretches to fit;
-    // in the wide toolbar it caps its own width, since that row hands it unbounded width.
+    // Stalker: a small "Categories" button (general groups) and a reload for the open group.
     Widget? categoriesFor({required bool stretch}) {
       if (_stalkerAcct == null) return null;
-      final button = OutlinedButton.icon(
-        onPressed: _cats.isEmpty ? null : _pickCategory,
-        icon: const Icon(Icons.folder_open_outlined, size: 18),
-        label: stretch
-            ? Text(catTitle ?? 'Category', overflow: TextOverflow.ellipsis, maxLines: 1)
-            : ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 220),
-                child: Text(catTitle ?? 'Category', overflow: TextOverflow.ellipsis, maxLines: 1),
-              ),
+      final row = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          OutlinedButton.icon(
+            onPressed: _groups.isEmpty ? null : _pickCategory,
+            icon: const Icon(Icons.folder_open_outlined, size: 18),
+            label: const Text('Categories'),
+          ),
+          if (_groupId != null && _groupId != stalkerEverythingId)
+            IconButton(
+              tooltip: 'Reload this group from the portal',
+              onPressed: () => _openGroup(_groupId!, force: true),
+              icon: const Icon(Icons.refresh, size: 20),
+            ),
+        ],
       );
-      final reload = IconButton(
-        tooltip: 'Reload this category from the portal',
-        onPressed: _catId == null ? null : () => _openCat(_catId!, force: true),
-        icon: const Icon(Icons.refresh, size: 20),
-      );
-      return stretch
-          ? Row(children: [Expanded(child: button), reload])
-          : Row(mainAxisSize: MainAxisSize.min, children: [button, reload]);
+      return stretch ? Align(alignment: Alignment.centerLeft, child: row) : row;
     }
 
     final categoriesNarrow = categoriesFor(stretch: true);
@@ -515,7 +533,11 @@ class _PosterBrowserState extends State<PosterBrowser> {
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              _vodStatus ?? (_loading ? 'Loading...' : '${_fmt(_items.length)} ${widget.noun}'),
+              _vodStatus ??
+                  (_loading
+                      ? 'Loading...'
+                      : '${_fmt(_items.length)} ${widget.noun}'
+                          '${_stalkerAcct != null && _groupId != null && _query.trim().isEmpty ? ' · ${stalkerGroupLabel(_groupId!)}' : ''}'),
               style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 11, color: BMColors.dim),
             ),
           ),
@@ -529,7 +551,7 @@ class _PosterBrowserState extends State<PosterBrowser> {
                           _vodStatus != null
                               ? 'Loading...'
                               : _stalkerAcct != null
-                                  ? 'Nothing here yet. Pick a category, or press Enter to search the portal.'
+                                  ? 'Nothing here yet. Pick a group under Categories, or press Enter to search the portal.'
                                   : 'No ${widget.noun} match. Load an account in Accounts, or loosen the filters.',
                           style: const TextStyle(color: BMColors.dim)),
                 )
@@ -608,71 +630,36 @@ class _PosterBrowserState extends State<PosterBrowser> {
   }
 }
 
-/// A searchable list of a Stalker portal's categories.
-class _CategoryPicker extends StatefulWidget {
-  final List<(String, String)> cats;
+/// The Stalker category menu: "Everything loaded so far", then the general groups.
+class _GroupPicker extends StatelessWidget {
+  final List<StalkerGroup> groups;
   final String? selected;
-  const _CategoryPicker({required this.cats, required this.selected});
-
-  @override
-  State<_CategoryPicker> createState() => _CategoryPickerState();
-}
-
-class _CategoryPickerState extends State<_CategoryPicker> {
-  String _q = '';
+  const _GroupPicker({required this.groups, required this.selected});
 
   @override
   Widget build(BuildContext context) {
-    final q = _q.trim().toLowerCase();
-    final list = q.isEmpty ? widget.cats : widget.cats.where((c) => c.$2.toLowerCase().contains(q)).toList();
+    Widget tile(String id, String label) {
+      final on = id == selected;
+      return ListTile(
+        dense: true,
+        title: Text(label,
+            style: TextStyle(color: on ? BMColors.mango : BMColors.text, fontWeight: on ? FontWeight.w600 : null)),
+        trailing: on ? const Icon(Icons.check, size: 18, color: BMColors.mango) : null,
+        onTap: () => Navigator.pop(context, id),
+      );
+    }
+
     return Dialog(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460, maxHeight: 560),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                autofocus: true,
-                onChanged: (v) => setState(() => _q = v),
-                onSubmitted: (_) {
-                  if (list.isNotEmpty) Navigator.pop(context, list.first.$1);
-                },
-                decoration: InputDecoration(
-                  hintText: 'Find a category...',
-                  prefixIcon: const Icon(Icons.search, color: BMColors.dim),
-                  isDense: true,
-                  filled: true,
-                  fillColor: BMColors.surfaceHigh,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Flexible(
-                child: list.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Text('No category matches.', style: TextStyle(color: BMColors.dim)),
-                      )
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: list.length,
-                        itemBuilder: (context, i) {
-                          final c = list[i];
-                          final on = c.$1 == widget.selected;
-                          return ListTile(
-                            dense: true,
-                            title: Text(c.$2,
-                                style: TextStyle(color: on ? BMColors.mango : BMColors.text, fontWeight: on ? FontWeight.w600 : null)),
-                            trailing: on ? const Icon(Icons.check, size: 18, color: BMColors.mango) : null,
-                            onTap: () => Navigator.pop(context, c.$1),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
+        constraints: const BoxConstraints(maxWidth: 360, maxHeight: 560),
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          children: [
+            tile(stalkerEverythingId, stalkerEverythingLabel),
+            const Divider(height: 8),
+            for (final g in groups) tile(g.id, g.label),
+          ],
         ),
       ),
     );

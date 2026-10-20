@@ -7,10 +7,15 @@ Why things are the way they are. Newest first within each section. No portal URL
 - Research first (docs, GitHub issues, existing open source) before building anything custom. Skip only for custom UI and app-specific logic.
 - Before each build, settle the small decisions up front with multiple-choice questions, each with a recommended pick and a "write your own" option.
 - Chad runs every command; Claude writes the code. Changes ship as installer scripts that refuse to overwrite files that changed locally.
-- Every reply with something to run has it in the reply: the file attached every time, and small scripts also as a paste-in Terminal block.
+- Scripts ship as downloads (pasting long scripts into Terminal is fragile). The file comes first, then numbered steps right under it: download, the one-line command to run it and what it should print, restart, what to test and send back.
+- Each installer carries everything it depends on, so the order you run them in never matters.
 - Run downloaded installers by newest match, so a "(1)" copy or a re-download never trips it up, and never delete before downloading:
   python3 "$(ls -t ~/Downloads/NAME*.py | head -1)"
 - Development chats live in the Black Mango Project so later sessions can search them. This file is the short version.
+
+## Layout (October 2026)
+
+- Movies, Shows, and Live TV stay side by side (list left, details or video right) down to about 620 px wide; they stack only in tiny windows. In a narrow details panel the poster stays beside the title and the text wraps.
 
 ## Brand (October 2026)
 
@@ -36,7 +41,12 @@ Settled details
 - Live failover works across account types in both directions (Stalker, Xtream, M3U), matched by channel name.
 - Keep-alive: a watchdog check-in every 2 minutes while a Stalker channel plays. If the session expired while browsing, the app logs in again quietly on the next request.
 - A MAC that's busy on another device gets the same "account already in use" message as Xtream.
-- Movies and shows (step 2): a searchable category menu next to the account filter, opening on the last category you used (remembered per account). The portal's own "All" category is hidden (it would mean the full crawl). A big category shows its first titles right away and keeps loading the rest in the background. Titles sort A to Z like the rest of the app, so the A-Z bar keeps working. Under "All accounts", Stalker titles appear once their category has been opened or searched. Cached categories refresh after 24 hours on next open, plus a manual refresh. Portal search runs on Enter; local results still filter as you type. Plot, cast, year, and rating are saved with each title so details open instantly. Opening a show loads its first season right away and the others in the background. Movie and episode failover includes Stalker in both directions, same as live.
+- Movies and shows (step 2; the menu was later simplified to general groups, see "Category menu"): a category menu next to the account filter, opening on the last one you used (remembered per account). The portal's own "All" category is hidden (it would mean the full crawl). A big category shows its first titles right away and keeps loading the rest in the background. Titles sort A to Z like the rest of the app, so the A-Z bar keeps working. Under "All accounts", Stalker titles appear once their category has been opened or searched. Cached categories refresh after 24 hours on next open, plus a manual refresh. Portal search runs on Enter; local results still filter as you type. Plot, cast, year, and rating are saved with each title so details open instantly. Opening a show loads its first season right away and the others in the background. Movie and episode failover includes Stalker in both directions, same as live.
+
+Category menu (October 2026)
+- A small "Categories" button. The menu shows "Everything loaded so far" (every title already cached for the account), then general groups instead of the portal's own dozens of specific categories: New & in cinemas, Top rated, Netflix/Prime/Disney & co, Action & Adventure, Comedy, Horror & Thriller, Drama, Kids & Animation, Documentary, Sci-Fi & Fantasy, Other (only groups that have categories show).
+- Groups only; the specific portal categories aren't listed. Picking a group loads every portal category in it, one after another (first titles show right away). It opens on the last group you used; the first time, on the first group.
+- The open group shows in the count line ("425 movies · Comedy"), not on the button.
 
 What the movies probe found (October 2026, one German/EU portal)
 - Movies and shows are separate types (vod, series), 14 titles per page, with the portal's own "All" category first.
@@ -46,6 +56,11 @@ What the movies probe found (October 2026, one German/EU portal)
 - The account card shows the portal's totals (its "All" counts); titles are cached as you open categories or search.
 - Portal search covers movies and shows.
 - Channel switching on its own is fast (about 1 s, even with the old channel still open). The long waits seen in the app came from requests piling up, which the one-connection fix stops; the wait message now just says the provider is starting the channel.
+
+Dead channels (October 2026)
+- Some of one portal's channels sit on a broken stream server: it answers after ~21 s with no video, and any new link right after gets HTTP 407 (a short lockout). Confirmed outside the app.
+- So a Stalker channel that answers with no video, or with 407, counts as down on that account: the app stops asking that server (more links only extend the lockout) and goes straight to the same channel on another account. It skips that channel on that account for 30 minutes; with no backup anywhere it tries anyway.
+- A Stalker channel gets 12 seconds to answer and send its first video (working ones take 1 to 5). No answer in time counts as down too, with the same 30-minute skip.
 
 One connection per account
 - What we saw: a Stalker MAC gets one stream at a time. While it's busy, the stream server parks new requests and answers ~40-48 s later, often with 509 ("too many connections"). Requests the app had walked away from sat in that queue, and the player's own quick retries joined it.

@@ -184,10 +184,10 @@ class CatalogService {
       Set<String>? countries,
       Set<String>? languages,
       String query = '',
-      String? category}) {
+      Set<String>? categories}) {
     final t = db.items;
     Expression<bool> p = t.kind.equals(kind);
-    if (category != null) p = p & t.category.equals(category);
+    if (categories != null) p = p & t.category.isIn(categories);
     if (accountIds != null && accountIds.isNotEmpty) p = p & t.accountId.isIn(accountIds);
     if (genre != null) p = p & t.genre.equals(genre);
     if (countries != null && countries.isNotEmpty) p = p & t.country.isIn(countries);
@@ -206,17 +206,17 @@ class CatalogService {
     return rows.map((r) => r.read(col) ?? '').where((s) => s.isNotEmpty).toList();
   }
 
-  Future<List<String>> countries(String kind, {Set<String>? accountIds, String? category}) =>
-      _distinct(db.items.country, _filter(kind, accountIds: accountIds, category: category));
+  Future<List<String>> countries(String kind, {Set<String>? accountIds, Set<String>? categories}) =>
+      _distinct(db.items.country, _filter(kind, accountIds: accountIds, categories: categories));
 
-  Future<List<String>> languages(String kind, {Set<String>? accountIds, String? category}) =>
-      _distinct(db.items.language, _filter(kind, accountIds: accountIds, category: category));
+  Future<List<String>> languages(String kind, {Set<String>? accountIds, Set<String>? categories}) =>
+      _distinct(db.items.language, _filter(kind, accountIds: accountIds, categories: categories));
 
   /// Genres that exist under the current account/country/language filters, in a fixed order.
   Future<List<String>> genres(String kind,
-      {Set<String>? accountIds, Set<String>? countries, Set<String>? languages, String? category}) async {
+      {Set<String>? accountIds, Set<String>? countries, Set<String>? languages, Set<String>? categories}) async {
     final found = await _distinct(db.items.genre,
-        _filter(kind, accountIds: accountIds, countries: countries, languages: languages, category: category));
+        _filter(kind, accountIds: accountIds, countries: countries, languages: languages, categories: categories));
     final order = kind == 'live' ? genreOrder : movieGenreOrder;
     return [for (final g in order) if (found.contains(g)) g];
   }
@@ -228,9 +228,9 @@ class CatalogService {
       Set<String>? languages,
       String query = '',
       bool byName = false,
-      String? category}) {
+      Set<String>? categories}) {
     final where = _filter(kind,
-        accountIds: accountIds, genre: genre, countries: countries, languages: languages, query: query, category: category);
+        accountIds: accountIds, genre: genre, countries: countries, languages: languages, query: query, categories: categories);
     return (db.select(db.items)
           ..where((_) => where)
           ..orderBy(byName
@@ -422,7 +422,9 @@ class CatalogService {
 
   /// Loads a category into the cache unless it was loaded in the last 24 hours ([force] reloads).
   /// The first page shows right away; the rest keeps arriving in the background.
-  Future<void> openStalkerCategory(Account a, String kind, String catId, String title, {bool force = false}) async {
+  /// [label] is what the count line says while it loads (the menu's group name).
+  Future<void> openStalkerCategory(Account a, String kind, String catId, String title,
+      {bool force = false, String? label}) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final loaded = stalkerCategoryLoadedAt(a.id, kind, catId);
     if (!force && now - loaded < 24 * 3600) return;
@@ -431,7 +433,7 @@ class CatalogService {
     var first = true;
     var lastBump = DateTime.fromMillisecondsSinceEpoch(0);
     try {
-      vodStatus.value = 'Loading $title...';
+      vodStatus.value = 'Loading ${label ?? title}...';
       await StalkerHub.of(a).vodCategory(_portalKind(kind), catId, (rows, done, total) async {
         final built = buildStalkerVodRows(a.id, kind, rows, (_) => title);
         await db.transaction(() async {
@@ -444,7 +446,7 @@ class CatalogService {
           }
           await db.batch((b) => b.insertAll(db.items, built));
         });
-        vodStatus.value = done < total ? 'Loading $title ($done/$total)...' : null;
+        vodStatus.value = done < total ? 'Loading ${label ?? title} ($done/$total)...' : null;
         // Refresh open screens on the first page, then about every 1.5 s.
         if (done == 1 || done == total || DateTime.now().difference(lastBump) > const Duration(milliseconds: 1500)) {
           lastBump = DateTime.now();
