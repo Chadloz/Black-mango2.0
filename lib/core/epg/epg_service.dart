@@ -149,6 +149,8 @@ class EpgService {
       if (list.isNotEmpty) changes.value++;
     } catch (e) {
       _cache[_key(i)] = (DateTime.now(), const []);
+      // An empty or garbled answer just means no guide for this channel: nothing to report.
+      if (e is FormatException) return;
       final msg = '$e';
       // 429 = "too many requests": pause this account's guide for 30 minutes.
       // 404 = this provider has no guide service at all: stop asking for the session.

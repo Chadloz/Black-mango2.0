@@ -11,6 +11,10 @@ GUIDE = """
 3. Open **System Settings > Privacy & Security**, scroll down, and click **Open Anyway** next to Black Mango. Confirm with your Mac password.
 
 You only do this once. After that, Black Mango opens normally and updates install from inside the app.
+
+If macOS ever says Black Mango "is damaged and can't be opened", the download is fine. Open **Terminal**, paste this line, press Return, and open Black Mango again:
+
+    xattr -cr "/Applications/Black Mango.app"
 """
 
 tag = sys.argv[1] if len(sys.argv) > 1 else ''

@@ -40,6 +40,9 @@ Why things are the way they are. Newest first within each section. No portal URL
 - Downloads: a .dmg to drag into Applications. The updater uses a .zip of the same app, signed with Sparkle's free EdDSA key. The public key is in Info.plist; the private key is in the Mac's Keychain and in the repo's SPARKLE_PRIVATE_KEY secret. Losing it means existing copies can't take updates, so it's backed up in the Keychain.
 - Pushing a tag builds everything in GitHub Actions: v2.0.0-beta.1 makes a pre-release (test build), v2.0.0 a final release. The update feed lives on the repo's "updates" branch (appcast.xml), so pre-releases reach testers too.
 - Release notes: Claude drafts them in plain language (release-notes/<tag>.md) and Chad approves before tagging.
+- The cloud build re-signs the whole app with a free ad-hoc signature (codesign --force --deep --sign -) and verifies it. Without that, a downloaded copy showed "damaged and can't be opened" (test build 1). Release pages also carry the xattr fallback line.
+- Moving data out of the sandbox (one time, Chad's Mac only): the library came over, but the saved passwords didn't; re-adding the Xtream accounts fixed it. New installs start fresh, so no one else is affected.
+- Live channels go to the player as open-ended streams (no length or range headers), even when a provider serves a looping file with a fixed size.
 
 ## Mini player (October 2026)
 

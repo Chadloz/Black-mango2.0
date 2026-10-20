@@ -185,7 +185,8 @@ class TsRelay {
       }
       res.statusCode = r.statusCode;
       res.reasonPhrase = r.reasonPhrase;
-      for (final h in const ['content-type', 'content-range', 'accept-ranges']) {
+      // Live only: no range headers, so the player never tries to jump around in a channel.
+      for (final h in const ['content-type']) {
         final v = r.headers.value(h);
         if (v != null) res.headers.set(h, v);
       }
@@ -220,11 +221,9 @@ class TsRelay {
       }
       res.persistentConnection = false;
       final seamless = r.contentLength < 0; // live streams have no fixed length
-      if (r.contentLength >= 0) {
-        res.contentLength = r.contentLength;
-      } else {
-        res.headers.chunkedTransferEncoding = false; // plain stream until either side closes
-      }
+      // Always hand the player an open-ended stream. Some channels are really a looping video file
+      // with a fixed size; given that size, the player tries to jump to the end and loops on reconnects.
+      res.headers.chunkedTransferEncoding = false; // plain stream until either side closes
       final s = await res.detachSocket(writeHeaders: true);
       socket = s;
       // Write errors (the player hung up mid-write) surface here; handled by the loop below.

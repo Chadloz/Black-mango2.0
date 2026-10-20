@@ -185,20 +185,21 @@ class _AccountCard extends StatelessWidget {
           ),
           _AccountStatus(account: account),
           const SizedBox(height: 12),
-          Row(
+          // Wraps onto a second line in a narrow window instead of running off the edge.
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
               OutlinedButton.icon(
                 onPressed: () => _rename(context),
                 icon: const Icon(Icons.edit, size: 16),
                 label: const Text('Rename'),
               ),
-              const SizedBox(width: 8),
               OutlinedButton.icon(
                 onPressed: () => _reload(context),
                 icon: const Icon(Icons.refresh, size: 16),
                 label: const Text('Reload'),
               ),
-              const SizedBox(width: 8),
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.redAccent,

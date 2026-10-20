@@ -15,7 +15,7 @@ jobs:
   macos:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: subosito/flutter-action@v2
         with:
@@ -40,6 +40,15 @@ jobs:
             --build-name="${{ steps.v.outputs.name }}" \
             --build-number="${{ github.run_number }}" \
             --dart-define=BM_VERSION="${{ steps.v.outputs.ver }}"
+
+      - name: Sign the whole app (free, self-made signature)
+        run: |
+          # Without a paid Apple account the build's own signature doesn't cover every part of the app,
+          # and macOS calls a downloaded copy "damaged". Re-signing the whole bundle fixes that, so
+          # people get the normal one-time "Open Anyway" step instead.
+          APP="build/macos/Build/Products/Release/Black Mango.app"
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
 
       - name: Package (.dmg and .zip)
         run: |
