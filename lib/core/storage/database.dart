@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 
 part 'database.g.dart';
 
@@ -79,7 +80,12 @@ class History extends Table {
 
 @DriftDatabase(tables: [Accounts, Items, Favorites, History])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(driftDatabase(name: 'black_mango'));
+  // Kept in Application Support (~/Library/Application Support/com.blackmango.blackMango), not Documents.
+  AppDatabase()
+      : super(driftDatabase(
+          name: 'black_mango',
+          native: const DriftNativeOptions(databaseDirectory: getApplicationSupportDirectory),
+        ));
 
   @override
   int get schemaVersion => 6;

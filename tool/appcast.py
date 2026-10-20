@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""Adds a release to Black Mango's Sparkle update feed (appcast.xml), newest first.
+Run by the release workflow; plain Python, no extra packages."""
+import argparse, datetime, html, os, re
+from email.utils import format_datetime
+
+HEAD = ('<?xml version="1.0" encoding="utf-8"?>\n'
+        '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">\n'
+        '  <channel>\n'
+        '    <title>Black Mango</title>\n')
+TAIL = '  </channel>\n</rss>\n'
+
+
+def md_to_html(md):
+    """Just enough Markdown for release notes: headings, bullet lists, bold, paragraphs."""
+    out, in_list = [], False
+
+    def inline(t):
+        t = html.escape(t)
+        return re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', t)
+
+    for raw in md.splitlines():
+        line = raw.rstrip()
+        bullet = re.match(r'^\s*[-*]\s+(.*)', line)
+        if bullet:
+            if not in_list:
+                out.append('<ul>')
+                in_list = True
+            out.append('<li>%s</li>' % inline(bullet.group(1)))
+            continue
+        if in_list:
+            out.append('</ul>')
+            in_list = False
+        if not line.strip():
+            continue
+        h = re.match(r'^(#{1,3})\s+(.*)', line)
+        if h:
+            level = min(len(h.group(1)) + 1, 4)
+            out.append('<h%d>%s</h%d>' % (level, inline(h.group(2)), level))
+        else:
+            out.append('<p>%s</p>' % inline(line))
+    if in_list:
+        out.append('</ul>')
+    return '\n'.join(out)
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument('--feed', required=True)
+    p.add_argument('--version', required=True)      # 2.0.0-beta.1
+    p.add_argument('--build', required=True)        # always increasing (the workflow run number)
+    p.add_argument('--url', required=True)          # the release's .zip
+    p.add_argument('--signature', required=True)    # sign_update output: sparkle:edSignature="..." length="..."
+    p.add_argument('--notes', default='')
+    p.add_argument('--min-os', default='12.0')
+    a = p.parse_args()
+
+    sig = re.search(r'edSignature="([^"]+)"', a.signature)
+    length = re.search(r'length="(\d+)"', a.signature)
+    if not sig or not length:
+        raise SystemExit('Could not read the update signature: %r' % a.signature)
+    notes = open(a.notes, encoding='utf-8').read() if a.notes and os.path.exists(a.notes) else 'Fixes and improvements.'
+    item = (
+        '    <item>\n'
+        '      <title>Black Mango %s</title>\n'
+        '      <pubDate>%s</pubDate>\n'
+        '      <sparkle:version>%s</sparkle:version>\n'
+        '      <sparkle:shortVersionString>%s</sparkle:shortVersionString>\n'
+        '      <sparkle:minimumSystemVersion>%s</sparkle:minimumSystemVersion>\n'
+        '      <description><![CDATA[%s]]></description>\n'
+        '      <enclosure url="%s" length="%s" type="application/octet-stream" sparkle:edSignature="%s"/>\n'
+        '    </item>\n'
+    ) % (html.escape(a.version), format_datetime(datetime.datetime.now(datetime.timezone.utc)), a.build,
+         html.escape(a.version), a.min_os, md_to_html(notes), html.escape(a.url), length.group(1), sig.group(1))
+
+    if os.path.exists(a.feed):
+        feed = open(a.feed, encoding='utf-8').read()
+        marker = '    <title>Black Mango</title>\n'
+        at = feed.find(marker)
+        if at < 0:
+            raise SystemExit('The existing feed has an unexpected layout.')
+        at += len(marker)
+        feed = feed[:at] + item + feed[at:]
+    else:
+        feed = HEAD + item + TAIL
+    with open(a.feed, 'w', encoding='utf-8') as f:
+        f.write(feed)
+    print('Feed updated: %s (build %s)' % (a.version, a.build))
+
+
+if __name__ == '__main__':
+    main()

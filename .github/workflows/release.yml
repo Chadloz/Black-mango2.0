@@ -1,0 +1,105 @@
+# Black Mango release: push a tag like v2.0.0-beta.1 (test build) or v2.0.0 (final) and this
+# builds the Mac app in the cloud, packages a .dmg (for people) and a .zip (for the updater),
+# signs the update with the Sparkle key, publishes a GitHub Release, and adds it to the
+# update feed on the "updates" branch. Tags with a dash (-beta.1) are marked as pre-releases.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Version from the tag
+        id: v
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VER="${TAG#v}"
+          NAME="${VER%%-*}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          if [[ "$VER" == *-* ]]; then echo "pre=true" >> "$GITHUB_OUTPUT"; else echo "pre=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Build the app
+        run: |
+          flutter pub get
+          flutter build macos --release \
+            --build-name="${{ steps.v.outputs.name }}" \
+            --build-number="${{ github.run_number }}" \
+            --dart-define=BM_VERSION="${{ steps.v.outputs.ver }}"
+
+      - name: Package (.dmg and .zip)
+        run: |
+          APP="build/macos/Build/Products/Release/Black Mango.app"
+          VER="${{ steps.v.outputs.ver }}"
+          mkdir -p dist dmg
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/Black-Mango-$VER.zip"
+          cp -R "$APP" dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "Black Mango" -srcfolder dmg -ov -format UDZO "dist/Black-Mango-$VER.dmg"
+
+      - name: Sign the update
+        id: sig
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "::error::The SPARKLE_PRIVATE_KEY secret is missing (repo Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          curl -fsSL -o sparkle.tar.xz https://github.com/sparkle-project/Sparkle/releases/download/2.6.4/Sparkle-2.6.4.tar.xz
+          mkdir -p sparkle && tar -xf sparkle.tar.xz -C sparkle
+          SIG=$(printf '%s' "$SPARKLE_PRIVATE_KEY" | ./sparkle/bin/sign_update --ed-key-file - "dist/Black-Mango-${{ steps.v.outputs.ver }}.zip")
+          echo "sig=$SIG" >> "$GITHUB_OUTPUT"
+
+      - name: Release notes
+        run: python3 tool/release_notes.py "${{ steps.v.outputs.tag }}" > dist/notes.md
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          name: Black Mango ${{ steps.v.outputs.ver }}
+          body_path: dist/notes.md
+          prerelease: ${{ steps.v.outputs.pre }}
+          files: |
+            dist/*.dmg
+            dist/*.zip
+
+      - name: Add it to the update feed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin updates >/dev/null; then
+            git fetch origin updates
+            git worktree add feed origin/updates
+            git -C feed checkout -B updates
+          else
+            git worktree add --detach feed
+            git -C feed checkout --orphan updates
+            git -C feed rm -rfq .
+          fi
+          NOTES="release-notes/${{ steps.v.outputs.tag }}.md"
+          python3 tool/appcast.py \
+            --feed feed/appcast.xml \
+            --version "${{ steps.v.outputs.ver }}" \
+            --build "${{ github.run_number }}" \
+            --url "https://github.com/${{ github.repository }}/releases/download/${{ steps.v.outputs.tag }}/Black-Mango-${{ steps.v.outputs.ver }}.zip" \
+            --signature '${{ steps.sig.outputs.sig }}' \
+            --notes "$NOTES"
+          git -C feed add appcast.xml
+          git -C feed commit -m "Update feed: ${{ steps.v.outputs.ver }}"
+          git -C feed push origin updates

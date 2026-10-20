@@ -28,5 +28,11 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/Chadloz/Black-mango2.0/updates/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>RrwwTWwyjNI9byP2S9fTK08RwG071W2f5Z+e4hLq68o=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
 </dict>
 </plist>

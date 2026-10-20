@@ -9,6 +9,7 @@ import '../../core/hotkeys.dart';
 import '../../core/backup.dart';
 import '../../core/playback/still_watching.dart';
 import '../../core/playback/live_buffer.dart';
+import '../../core/updates.dart';
 
 const _langOptions = [
   ('', 'Automatic'),
@@ -405,7 +406,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Black Mango 2.0 · development build', style: TextStyle(color: BMColors.text)),
+                  // Set at release time; development builds say so.
+                  Text(Updates.version == '' ? 'Black Mango 2.0 · development build' : 'Black Mango ${Updates.version}',
+                      style: TextStyle(color: BMColors.text)),
                   SizedBox(height: 4),
                   Text('Free and open source (GPL-3.0) · github.com/Chadloz/Black-mango2.0',
                       style: TextStyle(color: BMColors.dim, fontSize: 13)),
@@ -416,8 +419,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         _row(
           'App updates',
-          const OutlinedButton(onPressed: null, child: Text('Check for updates')),
-          sub: 'Automatic updates arrive with the first 2.0 release.',
+          OutlinedButton(onPressed: Updates.checkNow, child: const Text('Check for updates')),
+          sub: 'Black Mango checks quietly when it opens and once a day. When there\'s a new version, you\'ll see what\'s new and can install it or wait.',
         ),
       ],
     );

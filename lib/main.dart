@@ -11,6 +11,7 @@ import 'core/log_quiet.dart';
 import 'core/widgets/mini_player.dart';
 import 'package:window_manager/window_manager.dart';
 import 'core/playback/still_watching.dart';
+import 'core/updates.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,4 +27,5 @@ Future<void> main() async {
   LogQuiet.start();
   PopOut.startAutoFloat();
   runApp(const BlackMangoApp());
+  Updates.start(); // release builds: a quiet check now and once a day
 }

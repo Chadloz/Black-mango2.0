@@ -25,6 +25,22 @@ Why things are the way they are. Newest first within each section. No portal URL
 - A channel that answers and then sends nothing three times in a row is treated as down on that account (any account type): straight to a backup, skipped there for 30 minutes.
 - Logs never show a working stream link: logins, MACs, and play tokens are masked in the Terminal as well as in the copied log.
 
+## Roadmap to the public release (October 2026)
+
+1. Release setup: test builds as GitHub pre-releases, with working updates.
+2. Windows.
+3. Skins, the very last thing before the drop: built-in skins, plus making your own by picking colors for the parts we expose, optionally with textures.
+4. Public release (2.0.0), plus a final 1.x update that says 2.0 is here, with a download button.
+
+## Releases and updates (October 2026)
+
+- Updates use Sparkle through the auto_updater package. Release builds check quietly when they open and once a day; Settings has Check for updates. When there's a new version, Sparkle shows what's new and asks: install and relaunch, or later. Development builds (flutter run) only check when you press the button.
+- The Mac App Sandbox is off, because a sandboxed app can't replace itself (only App Store apps need the sandbox). That moves where macOS keeps the app's data: the database now lives in ~/Library/Application Support/com.blackmango.blackMango, and the release installer copied the existing data there once.
+- No paid Apple developer account for now. On first install, macOS Sequoia blocks the app once; people open System Settings > Privacy & Security > Open Anyway. Every release page carries that short guide. Updates afterwards come through Sparkle.
+- Downloads: a .dmg to drag into Applications. The updater uses a .zip of the same app, signed with Sparkle's free EdDSA key. The public key is in Info.plist; the private key is in the Mac's Keychain and in the repo's SPARKLE_PRIVATE_KEY secret. Losing it means existing copies can't take updates, so it's backed up in the Keychain.
+- Pushing a tag builds everything in GitHub Actions: v2.0.0-beta.1 makes a pre-release (test build), v2.0.0 a final release. The update feed lives on the repo's "updates" branch (appcast.xml), so pre-releases reach testers too.
+- Release notes: Claude drafts them in plain language (release-notes/<tag>.md) and Chad approves before tagging.
+
 ## Mini player (October 2026)
 
 - Minimize: a button on the mini player shrinks it to a slim bar with the title, play/pause, and close. No video; the sound keeps playing. Works for the in-app card and the floating window (which keeps its bottom-right corner in place). Going back to the full player, or stopping, shows the video again next time.
