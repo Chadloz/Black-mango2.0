@@ -3,6 +3,41 @@
   <channel>
     <title>Black Mango</title>
     <item>
+      <title>Black Mango 2.0.0-beta.3 for Windows</title>
+      <pubDate>Tue, 20 Oct 2026 16:26:02 +0000</pubDate>
+      <sparkle:version>2.0.0+3</sparkle:version>
+      <sparkle:shortVersionString>2.0.0-beta.3</sparkle:shortVersionString>
+      <description><![CDATA[<h2>Black Mango 2.0, test build 3</h2>
+<h3>New</h3>
+<ul>
+<li><b>Windows.</b> The first Windows test build. Download the Setup .exe: it installs just for you (no admin password), adds Black Mango to the Start menu, can add a desktop shortcut, and keeps itself up to date like the Mac version.</li>
+<li>Open in VLC works on Windows too.</li>
+</ul>
+<h3>Good to know</h3>
+<ul>
+<li>To bring your accounts, favorites and history over from a Mac, use <b>Settings &gt; Data &gt; Export backup</b> there and <b>Import backup</b> on Windows.</li>
+</ul>]]></description>
+      <enclosure url="https://github.com/Chadloz/Black-mango2.0/releases/download/v2.0.0-beta.3/Black-Mango-2.0.0-beta.3-Setup.exe" length="27743071" type="application/octet-stream" sparkle:os="windows" sparkle:version="2.0.0+3" sparkle:shortVersionString="2.0.0-beta.3" sparkle:installerArguments="/SILENT /SP- /SUPPRESSMSGBOXES /NORESTART" sparkle:dsaSignature="MDwCHEQAVqR/6rDT0V1Ax8fAt4yVkfjBPDErWD0LDxoCHBGuPNwuYMfXAfbbgM8NEDd+PttuWKqBGa/3c2g="/>
+    </item>
+    <item>
+      <title>Black Mango 2.0.0-beta.3</title>
+      <pubDate>Tue, 20 Oct 2026 16:26:02 +0000</pubDate>
+      <sparkle:version>3</sparkle:version>
+      <sparkle:shortVersionString>2.0.0-beta.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<h2>Black Mango 2.0, test build 3</h2>
+<h3>New</h3>
+<ul>
+<li><b>Windows.</b> The first Windows test build. Download the Setup .exe: it installs just for you (no admin password), adds Black Mango to the Start menu, can add a desktop shortcut, and keeps itself up to date like the Mac version.</li>
+<li>Open in VLC works on Windows too.</li>
+</ul>
+<h3>Good to know</h3>
+<ul>
+<li>To bring your accounts, favorites and history over from a Mac, use <b>Settings &gt; Data &gt; Export backup</b> there and <b>Import backup</b> on Windows.</li>
+</ul>]]></description>
+      <enclosure url="https://github.com/Chadloz/Black-mango2.0/releases/download/v2.0.0-beta.3/Black-Mango-2.0.0-beta.3.zip" length="41225686" type="application/octet-stream" sparkle:os="macos" sparkle:edSignature="f8KtAfwseeqfcNbSGWE2WKFl2/mdOn7Ly10fXe9NIbfy3bYg3tV4hyxkb7S2qiRIVi6B+occjL7aTkMrILl5CQ=="/>
+    </item>
+    <item>
       <title>Black Mango 2.0.0-beta.2</title>
       <pubDate>Tue, 20 Oct 2026 14:24:01 +0000</pubDate>
       <sparkle:version>2</sparkle:version>
@@ -16,7 +51,7 @@
 <li>Channels whose guide comes back empty no longer fill the log with errors.</li>
 <li>The Accounts screen&#x27;s buttons wrap neatly when the window shrinks to the floating player.</li>
 </ul>]]></description>
-      <enclosure url="https://github.com/Chadloz/Black-mango2.0/releases/download/v2.0.0-beta.2/Black-Mango-2.0.0-beta.2.zip" length="41225975" type="application/octet-stream" sparkle:edSignature="o63qxbVOsvlNTBqC0LXiE5cw3SXKLFn9x/azCz9cG7aa4bYFcAHmZNmeEQ2rNkyfSM2lWAPyld2aNmWzIkwfDg=="/>
+      <enclosure sparkle:os="macos" url="https://github.com/Chadloz/Black-mango2.0/releases/download/v2.0.0-beta.2/Black-Mango-2.0.0-beta.2.zip" length="41225975" type="application/octet-stream" sparkle:edSignature="o63qxbVOsvlNTBqC0LXiE5cw3SXKLFn9x/azCz9cG7aa4bYFcAHmZNmeEQ2rNkyfSM2lWAPyld2aNmWzIkwfDg=="/>
     </item>
     <item>
       <title>Black Mango 2.0.0-beta.1</title>
@@ -43,7 +78,7 @@
 <li>Mac only for now. Windows is coming.</li>
 <li>This is a test build. If something misbehaves, send the log from <b>Settings &gt; Debug Log &gt; Copy recent</b>.</li>
 </ul>]]></description>
-      <enclosure url="https://github.com/Chadloz/Black-mango2.0/releases/download/v2.0.0-beta.1/Black-Mango-2.0.0-beta.1.zip" length="41224332" type="application/octet-stream" sparkle:edSignature="eGG1e/rO52FrQyUqNbtU6I8MUXFQnkUkAMYyjTAJAPpQfVx6WHeOHRaFRCek1rpOwjCmn4kwe/KIg0ydjyfSDQ=="/>
+      <enclosure sparkle:os="macos" url="https://github.com/Chadloz/Black-mango2.0/releases/download/v2.0.0-beta.1/Black-Mango-2.0.0-beta.1.zip" length="41224332" type="application/octet-stream" sparkle:edSignature="eGG1e/rO52FrQyUqNbtU6I8MUXFQnkUkAMYyjTAJAPpQfVx6WHeOHRaFRCek1rpOwjCmn4kwe/KIg0ydjyfSDQ=="/>
     </item>
   </channel>
 </rss>
