@@ -22,6 +22,18 @@ import '../prefs.dart';
 /// Stalker links expire within minutes, so a Stalker stream comes with a [refresh]
 /// function and every reconnect asks the portal for a fresh link instead of reusing one.
 class TsRelay {
+  /// Called each time a live stream loses footage at a reconnect (the picture jumps), with how
+  /// many jumps there have been in the last 2 minutes. Playback decides what to do: try the
+  /// channel as HLS, switch accounts, or just say so.
+  static void Function(int jumps)? onJumps;
+
+  /// Called each time a live stream's provider drops the connection and the relay reconnects.
+  static void Function()? onDrop;
+
+  /// Providers that never take us back on the same server after a drop (every try "busy"):
+  /// skip that step for them, since waiting on it only makes each reconnect slower.
+  static final _noSameServer = <String>{};
+
   static HttpServer? _server;
   static final _urls = <String, _Target>{};
   static int _next = 0;
@@ -138,8 +150,80 @@ class TsRelay {
     debugPrint('[relay] stream $name via relay');
     final asked = DateTime.now();
     var sentTotal = 0;
+    // The stream server the provider sent us to (after its redirect). Providers run a pool of
+    // servers whose clocks don't match; asking the provider's address again on a reconnect can
+    // land on a different one, and the picture jumps. So reconnect to the same server first.
+    Uri? sticky;
+    String? stickyHost;
+    var moved = false; // the last reconnect landed on a different server than before
+
+    final providerHost = Uri.tryParse(t.url)?.host ?? '';
+
+    Future<HttpClientResponse?> sameServer() async {
+      final u = sticky;
+      if (u == null) return null;
+      if (_noSameServer.contains(providerHost)) {
+        sticky = null;
+        return null;
+      }
+      var busyTries = 0;
+      // Right after a drop the server often still counts our old connection and says "busy"
+      // (509, 407, 403) for a moment: give it a few tries before going back to the provider.
+      for (var attempt = 0; attempt < 3 && !closed; attempt++) {
+        if (attempt > 0) await Future.delayed(const Duration(milliseconds: 1500));
+        if (closed) return null;
+        try {
+          final up = await client.getUrl(u);
+          for (final h in const ['user-agent', 'accept']) {
+            final v = req.headers.value(h);
+            if (v != null) up.headers.set(h, v);
+          }
+          final r = await up.close().timeout(const Duration(seconds: 6));
+          if (r.statusCode < 400) {
+            if (attempt > 0) debugPrint('[relay] $name: back on the same server');
+            return r;
+          }
+          r.listen((_) {}).cancel();
+          final busy = r.statusCode == 509 || r.statusCode == 407 || r.statusCode == 403;
+          if (!busy) {
+            debugPrint('[relay] $name: the same server said ${r.statusCode}; asking the provider again');
+            break;
+          }
+          busyTries++;
+          debugPrint('[relay] $name: the same server is still busy (${r.statusCode})');
+        } catch (e) {
+          debugPrint('[relay] $name: the same server didn\'t answer (${_why(e)}); asking the provider again');
+          break;
+        }
+      }
+      if (busyTries >= 3 && providerHost.isNotEmpty) {
+        _noSameServer.add(providerHost);
+        debugPrint('[relay] $name: this provider never takes us back on the same server; '
+            'going straight to it from now on');
+      }
+      sticky = null; // its link has probably expired: start over from the provider
+      return null;
+    }
+
+    void remember(HttpClientResponse r, String asked) {
+      if (r.statusCode >= 400 || r.redirects.isEmpty) return;
+      var u = Uri.parse(asked);
+      for (final hop in r.redirects) {
+        u = u.resolveUri(hop.location);
+      }
+      if (stickyHost != null && stickyHost != u.host) {
+        moved = true;
+        debugPrint('[relay] $name: the provider moved us to another server (${u.host})');
+      }
+      sticky = u;
+      stickyHost = u.host;
+    }
 
     Future<HttpClientResponse> open({bool fresh = false}) async {
+      if (fresh && t.refresh == null) {
+        final same = await sameServer();
+        if (same != null) return same;
+      }
       final refresh = t.refresh;
       if (fresh && refresh != null) {
         try {
@@ -162,6 +246,7 @@ class TsRelay {
       // A busy Stalker server can sit on a request for ~45 s before saying no (509): stop at 55.
       // A Stalker channel that hasn't answered within 12 s counts as down on this account.
       final r = stalker ? await up.close().timeout(_stalkerStart) : await up.close();
+      if (!stalker) remember(r, target);
       if (stalker) {
         // Diagnostics for Stalker: what the stream server answered (never the link itself).
         final hops = r.redirects.isEmpty ? '' : ', redirected to ${r.redirects.last.location.host}';
@@ -238,9 +323,17 @@ class TsRelay {
         shutdown();
       }, onError: (_) => shutdown(), cancelOnError: true);
 
+      final jumps = <DateTime>[];
       final filter = _TsFilter(
         onDolby: () => debugPrint('[relay] Dolby Digital Plus audio relabeled so it plays'),
         onResume: (m) => debugPrint('[relay] $name reconnected: $m'),
+        onJump: () {
+          final now = DateTime.now();
+          jumps
+            ..add(now)
+            ..removeWhere((t) => now.difference(t) > const Duration(minutes: 2));
+          TsRelay.onJumps?.call(jumps.length);
+        },
       );
       var quickEnds = 0;
       var silentRuns = 0; // reconnects in a row where the server answered but sent nothing
@@ -275,6 +368,7 @@ class TsRelay {
         debugPrint('[relay] provider ended $name after ${secs.toStringAsFixed(0)}s '
             '(${(bytes / 1e6).toStringAsFixed(1)} MB)${seamless ? '; reconnecting' : ''}');
         if (!seamless) break;
+        TsRelay.onDrop?.call();
         // Answering and then sending nothing, three times running: the channel is down here.
         // Mark it so the player gets a clear "gone" (410) and switches to a backup within seconds.
         silentRuns = bytes == 0 ? silentRuns + 1 : 0;
@@ -310,7 +404,9 @@ class TsRelay {
           }
         }
         if (next == null) break;
-        filter.markReconnect();
+        // A different server's frames don't build on the old server's: hold for a full frame.
+        filter.markReconnect(newServer: moved);
+        moved = false;
         r = next;
         src = next;
       }
@@ -396,15 +492,20 @@ String _label(String url) {
 /// stream has caught up. Normal playback is never touched. Compares DECODE timestamps,
 /// which always move forward (display timestamps don't, with B-frames).
 class _TsFilter {
-  _TsFilter({required this.onDolby, required this.onResume});
+  _TsFilter({required this.onDolby, required this.onResume, required this.onJump});
   final VoidCallback onDolby;
   final void Function(String) onResume;
+  final VoidCallback onJump; // a reconnect that lost footage (the picture jumps forward)
 
   static const _videoTypes = {0x01, 0x02, 0x1B, 0x24};
 
   final _pmtPids = <int>{};
   final _esPids = <int>{};
   int? _videoPid;
+  int? _videoType; // stream type from the track table: 0x1B H.264, 0x24 HEVC, 0x01/0x02 MPEG
+  final _overlap = <int>{}; // tracks whose replay after a reconnect overlapped what we'd sent (no gap)
+  bool _waitKey = false; // after a gap: hold the picture until the next full frame (no blocks)
+  int _heldFrames = 0;
   final _lastTs = <int, int>{}; // per track: last decode timestamp passed along (90 kHz)
   final _catching = <int>{}; // tracks still skipping replayed footage after a reconnect
   final _dropping = <int, bool>{};
@@ -413,8 +514,12 @@ class _TsFilter {
   Uint8List _carry = Uint8List(0);
   bool _toldDolby = false;
 
-  void markReconnect() {
+  bool _newServer = false; // this reconnect is to a different server than the frames so far
+
+  void markReconnect({bool newServer = false}) {
+    _newServer = newServer;
     _reconnects++;
+    _overlap.clear();
     _catching
       ..clear()
       ..addAll(_lastTs.keys);
@@ -490,22 +595,58 @@ class _TsFilter {
           final last = _lastTs[pid]!;
           final diff = t - last;
           if (diff.abs() > 60 * 90000) {
-            // Provider restarted its clock: don't risk dropping real footage.
+            // Provider restarted its clock: don't risk dropping real footage, but the new
+            // stream's frames can't build on ours, so hold the picture until a full frame.
             _catching.remove(pid);
             _dropping[pid] = false;
             _lastTs[pid] = t;
-            if (pid == _videoPid) onResume('provider restarted its clock; passing it through');
+            if (pid == _videoPid) {
+              _waitKey = true;
+              onJump();
+              onResume('provider restarted its clock; holding the picture until a full frame');
+            }
           } else if (t <= last) {
             _dropping[pid] = true; // already delivered before the hang-up
+            _overlap.add(pid);
           } else {
             _catching.remove(pid); // caught up: from here on, everything passes
             _dropping[pid] = false;
             _lastTs[pid] = t;
-            if (pid == _videoPid) onResume('caught up after skipping repeated footage');
+            if (pid == _videoPid) {
+              final lost = diff / 90000.0;
+              if (!_overlap.contains(pid) && lost > 0.5) {
+                // The provider came back past where we were: footage is missing, and the next
+                // frames refer to pictures we never got. Hold until a full frame (no blocks).
+                _waitKey = true;
+                onJump();
+                onResume('lost ${lost.toStringAsFixed(1)} s of footage; holding the picture until a full frame');
+              } else if (_newServer) {
+                // Same moment in the show, but from a different server's encoder: its frames
+                // refer to pictures we never got. Hold until a full frame (no blocks).
+                _waitKey = true;
+                onResume('caught up on a different server; holding the picture until a full frame');
+              } else {
+                onResume('caught up after skipping repeated footage');
+              }
+            }
           }
         } else {
           _dropping[pid] = false;
           _lastTs[pid] = t;
+        }
+        // Holding the picture: video waits for a full frame (sound keeps going).
+        if (pid == _videoPid && _waitKey && _dropping[pid] != true) {
+          if (_isFullFrame(d, i, p, end)) {
+            _waitKey = false;
+            _heldFrames = 0;
+            onResume('full frame; picture resumes');
+          } else if (++_heldFrames > 240) {
+            _waitKey = false; // this stream doesn't mark full frames: don't freeze forever
+            _heldFrames = 0;
+            onResume('no full-frame marker found; picture resumes');
+          } else {
+            _dropping[pid] = true;
+          }
         }
       } else {
         _dropping[pid] = false; // tables and other non-frame data
@@ -530,6 +671,30 @@ class _TsFilter {
     return true;
   }
 
+  /// Whether the frame starting in this packet is a full frame (one that doesn't build on
+  /// earlier pictures): the random-access flag most encoders set, or the frame's own markers
+  /// (H.264 IDR/SPS, HEVC IRAP/VPS/SPS, MPEG-2 sequence/GOP header).
+  bool _isFullFrame(Uint8List d, int i, int pes, int end) {
+    final afc = (d[i + 3] >> 4) & 3;
+    if ((afc == 2 || afc == 3) && d[i + 4] > 0 && (d[i + 5] & 0x40) != 0) return true;
+    if (pes + 9 > end) return false;
+    for (var k = pes + 9 + d[pes + 8]; k + 3 < end; k++) {
+      if (d[k] != 0 || d[k + 1] != 0 || d[k + 2] != 1) continue;
+      final b = d[k + 3];
+      if (_videoType == 0x1B) {
+        final nal = b & 0x1F; // H.264: IDR picture or sequence settings
+        if (nal == 5 || nal == 7) return true;
+      } else if (_videoType == 0x24) {
+        final nal = (b >> 1) & 0x3F; // HEVC: random-access picture or stream settings
+        if ((nal >= 16 && nal <= 21) || nal == 32 || nal == 33) return true;
+      } else if (b == 0xB3 || b == 0xB8) {
+        return true; // MPEG-2: sequence or group-of-pictures header
+      }
+      k += 2;
+    }
+    return false;
+  }
+
   void _tables(Uint8List d, int p0, int end, int pid) {
     final p = p0 + 1 + d[p0]; // pointer field
     if (p + 12 > end) return;
@@ -551,7 +716,10 @@ class _TsFilter {
     while (k + 5 <= secEnd - 4) {
       final esPid = ((d[k + 1] & 0x1F) << 8) | d[k + 2];
       _esPids.add(esPid);
-      if (_videoTypes.contains(d[k]) && _videoPid == null) _videoPid = esPid;
+      if (_videoTypes.contains(d[k]) && _videoPid == null) {
+        _videoPid = esPid;
+        _videoType = d[k];
+      }
       if (d[k] == 0x87) {
         d[k] = 0x81;
         changed = true;

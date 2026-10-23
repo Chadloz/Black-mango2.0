@@ -204,7 +204,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           sub: 'Holds a few seconds in reserve so short hiccups from the provider don\'t become skips. Channels take that much longer to start. Applies to the next channel you open.',
         ),
         _row(
-          'Extra buffer for flaky channels',
+          'Fixes for flaky channels',
           OutlinedButton(
             onPressed: LiveBuffer.count() == 0
                 ? null
@@ -217,7 +217,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
             child: Text(LiveBuffer.count() == 0 ? 'None yet' : 'Reset (${LiveBuffer.count()})'),
           ),
-          sub: 'A channel that stalls twice in 5 minutes gets 3 more seconds of cushion (up to 15), remembered for that channel. After 30 smooth minutes it steps back down. Reset puts every channel back to your normal buffer.',
+          sub: 'A channel that stalls twice in 5 minutes gets 3 more seconds of cushion (up to 15, or 30 if its provider keeps dropping the connection). One whose provider keeps cutting it switches to HLS on the same account. Both are remembered per channel; extra cushion steps back down after 30 smooth minutes. Reset puts every channel back to normal.',
         ),
         _section('LIVE TV AUDIO'),
         _row(

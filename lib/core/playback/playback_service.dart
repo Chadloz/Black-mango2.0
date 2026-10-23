@@ -37,6 +37,8 @@ class PlaybackService {
 
   PlaybackService(this.accounts) {
     _applyStartupPrefs();
+    TsRelay.onJumps = _onJumps; // a provider that keeps cutting the stream and losing footage
+    TsRelay.onDrop = _onDrop; // a provider that keeps dropping the connection: room for more cushion
     // Stalker portals drop sessions that stop checking in: check in every 2 minutes while playing.
     Timer.periodic(const Duration(minutes: 2), (_) => _stalkerKeepAlive());
     // Every minute of smooth live watching counts toward easing a channel's extra buffer back down.
@@ -268,7 +270,7 @@ class PlaybackService {
         return;
       }
     }
-    final String url;
+    String url;
     try {
       url = await urlFor(item);
     } on BMError catch (e) {
@@ -282,6 +284,8 @@ class PlaybackService {
       }
       rethrow;
     }
+    // A channel that played better as HLS on this account opens that way (see _onJumps).
+    url = _hlsChoice(item, url);
     final host = Uri.tryParse(url)?.host ?? '';
     if (host.isNotEmpty) _triedHosts.add(host);
     // Known-down server: go straight to a backup instead of waiting on it.
@@ -300,6 +304,8 @@ class PlaybackService {
     _recentReconnects.clear();
     _longReconnects.clear();
     _noVideoReconnects = 0;
+    _unstableFor = null;
+    _hlsTried = null;
     _stalls.clear();
     _smoothMinutes = 0;
     _reconnectPending = false;
@@ -898,6 +904,12 @@ class PlaybackService {
       _failoverOrGiveUp(item, "This channel isn't working on this account right now. Try again in 30 minutes, or pick another channel.");
       return;
     }
+    // Opened as HLS and it didn't start: this account doesn't serve HLS (or not this channel).
+    // Back to the regular stream, and don't try HLS on this account for a week.
+    if (!_started && _hlsActive) {
+      _revertHls(item, 'it did not start');
+      return;
+    }
     // Never got going: one retry (covers one-connection-limit providers), then give up clearly.
     if (!_started) {
       // A 403 usually means our old connection is still open, so be patient before failing over.
@@ -1020,6 +1032,149 @@ class PlaybackService {
   /// A short note on the player for a few seconds (for buttons like the auto-float switch).
   void showNote(String msg) => _note(msg);
 
+  int? _unstableFor; // the channel we already handled "keeps cutting" for
+  int? _hlsTried; // the channel we already switched to HLS during this viewing
+  final List<DateTime> _drops = []; // provider drops on this channel in the last 2 minutes
+  int? _dropsFor;
+
+  /// The relay reconnected after the provider dropped the connection. 4 drops in 2 minutes:
+  /// this channel may use up to 30 seconds of cushion (it still grows only when it stalls).
+  void _onDrop() {
+    final item = current.value;
+    if (item == null || item.kind != 'live') return;
+    if (_dropsFor != item.id) {
+      _dropsFor = item.id;
+      _drops.clear();
+    }
+    final now = DateTime.now();
+    _drops
+      ..add(now)
+      ..removeWhere((t) => now.difference(t) > const Duration(minutes: 2));
+    if (_drops.length >= 4 && !LiveBuffer.isHeavy(item)) {
+      LiveBuffer.markHeavy(item);
+      debugPrint('[buffer] ${item.name}: provider keeps dropping the connection; '
+          'this channel can now get up to ${LiveBuffer.maxHeavy}s of buffer');
+    }
+  }
+  bool _hlsActive = false; // the current live stream is the HLS version
+
+  static String _hlsKey(Item i) => 'hls.${i.accountId}|${i.streamId}';
+
+  /// The same Xtream live channel as HLS (.../live/user/pass/123.m3u8), or null if this link
+  /// isn't one of those.
+  static String? _hlsUrlOf(String url) {
+    final u = Uri.tryParse(url);
+    if (u == null || !u.path.contains('/live/')) return null;
+    if (u.path.endsWith('.ts')) return u.replace(path: '${u.path.substring(0, u.path.length - 3)}.m3u8').toString();
+    if (RegExp(r'/\d+$').hasMatch(u.path)) return u.replace(path: '${u.path}.m3u8').toString();
+    return null;
+  }
+
+  static String _tsUrlOf(String url) {
+    final u = Uri.tryParse(url);
+    if (u == null || !u.path.endsWith('.m3u8')) return url;
+    return u.replace(path: '${u.path.substring(0, u.path.length - 5)}.ts').toString();
+  }
+
+  /// HLS failed to start on this account in the last week: don't try it there again yet.
+  static bool _hlsBlocked(String accountId) {
+    final t = int.tryParse(Prefs.getStr('hlsno.$accountId') ?? '');
+    return t != null && DateTime.now().millisecondsSinceEpoch - t < const Duration(days: 7).inMilliseconds;
+  }
+
+  String _hlsChoice(Item item, String url) {
+    _hlsActive = false;
+    if (item.kind != 'live' || _stalkerKnown(item)) return url;
+    if (Prefs.getStr(_hlsKey(item)) == null || _hlsBlocked(item.accountId)) return url;
+    final h = _hlsUrlOf(url);
+    if (h == null) return url;
+    _hlsActive = true;
+    debugPrint('[playback] ${item.name}: opening as HLS (remembered for this channel)');
+    _watchHlsStart(item);
+    return h;
+  }
+
+  Timer? _hlsWatch;
+
+  /// HLS gets 12 seconds to show a picture. A provider's HLS can load its list and then fail on
+  /// every chunk without the player ever giving up, so don't wait on it: go back to the regular stream.
+  void _watchHlsStart(Item item) {
+    _hlsWatch?.cancel();
+    _hlsWatch = Timer(const Duration(seconds: 12), () {
+      if (_hlsActive && !_started && current.value?.id == item.id) _revertHls(item, 'no picture within 12 s');
+    });
+  }
+
+  /// Back to the regular stream, and no HLS on this account for a week.
+  void _revertHls(Item item, String why) {
+    final url = _lastUrl;
+    if (!_hlsActive || url == null) return;
+    _hlsWatch?.cancel();
+    _hlsActive = false;
+    final ts = _tsUrlOf(url);
+    Prefs.setStr(_hlsKey(item), null);
+    Prefs.setStr('hlsno.${item.accountId}', '${DateTime.now().millisecondsSinceEpoch}');
+    debugPrint("[playback] ${item.name}: HLS didn't work on this account ($why); back to the regular stream");
+    _note("HLS isn't working on this account, so back to the regular stream.");
+    _lastUrl = ts;
+    _startRetries = 0;
+    _reopen(item, ts).then((_) => player.play());
+  }
+
+  /// The relay reports footage lost at reconnects (jumps), counted over 2 minutes.
+  /// 3 jumps: try the channel as HLS on the same account (chunks: a dropped connection loses
+  /// nothing) and remember that. 6 jumps (or HLS not possible): note, and switch accounts.
+  void _onJumps(int jumps) {
+    final item = current.value;
+    if (item == null || item.kind != 'live') return;
+    final url = _lastUrl;
+    if (jumps >= 3 &&
+        !_hlsActive &&
+        _hlsTried != item.id &&
+        !_stalkerKnown(item) &&
+        !_hlsBlocked(item.accountId) &&
+        url != null &&
+        _hlsUrlOf(url) != null) {
+      _switchToHls(item, _hlsUrlOf(url)!);
+      return;
+    }
+    if (jumps >= 6) _onUnstable();
+  }
+
+  Future<void> _switchToHls(Item item, String hls) async {
+    _hlsTried = item.id;
+    await Prefs.setStr(_hlsKey(item), '1');
+    debugPrint('[playback] ${item.name}: keeps jumping; switching this channel to HLS on the same account');
+    _note('Switched this channel to HLS for a steadier picture');
+    _hlsActive = true;
+    _started = false; // so a failed HLS start falls back to the regular stream
+    _startRetries = 0;
+    _lastUrl = hls;
+    _watchHlsStart(item);
+    await _reopen(item, hls);
+    await player.play();
+  }
+
+  /// The provider keeps cutting this live stream and footage gets lost each time (the picture
+  /// jumps): say so, and switch to the same channel on another account if one has it. With no
+  /// backup it keeps playing here with just the note.
+  Future<void> _onUnstable() async {
+    final item = current.value;
+    if (item == null || item.kind != 'live' || _unstableFor == item.id) return;
+    _unstableFor = item.id;
+    final alts = catalog == null ? const <Item>[] : await catalog!.failoverCandidates(item, {item.accountId});
+    if (current.value?.id != item.id) return; // you moved on meanwhile
+    if (alts.isEmpty) {
+      debugPrint('[playback] ${item.name}: provider keeps cutting the stream; no other account has it');
+      _note('This provider keeps cutting the stream. No other account has this channel.');
+      return;
+    }
+    debugPrint('[playback] ${item.name}: provider keeps cutting the stream; switching accounts');
+    _deadUntil['${item.accountId}|${item.streamId}'] = DateTime.now().add(const Duration(minutes: 30));
+    _note('This provider keeps cutting the stream. Switching to another account.');
+    _failoverOrGiveUp(item, 'This channel keeps getting cut off. Try again later, or pick another channel.');
+  }
+
   /// The picture stopped to rebuffer. Two of those within 5 minutes on a live channel earns it
   /// 3 more seconds of cushion (up to 15), remembered for that channel.
   void _onStall() {
@@ -1035,8 +1190,8 @@ class PlaybackService {
     _stalls.add(now);
     if (_stalls.length < 2) return;
     _stalls.clear();
-    if (LiveBuffer.total(cur) >= LiveBuffer.maxTotal) return;
-    LiveBuffer.setExtra(cur, LiveBuffer.extra(cur) + LiveBuffer.step).then((_) async {
+    if (LiveBuffer.total(cur) >= LiveBuffer.maxFor(cur)) return;
+    LiveBuffer.setExtra(cur, LiveBuffer.extra(cur) + LiveBuffer.stepFor(cur)).then((_) async {
       final after = LiveBuffer.total(cur);
       debugPrint('[buffer] ${cur.name} stalled twice in 5 minutes; this channel now gets ${after}s of buffer');
       _note('Extra buffer for this channel: $after s');

@@ -19,20 +19,43 @@ import '../storage/database.dart';
 const stalkerUserAgent =
     'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3';
 
-/// The Mac's own timezone name (America/Denver style), so guide times line up.
+/// This computer's timezone name (America/Denver style), so guide times line up.
+/// Mac: from /etc/localtime. Windows: from its own zone names ("Mountain Daylight Time"),
+/// else from the UTC offset (Etc/GMT+6 style, where the sign is flipped by convention).
 String macTimezone() {
   try {
     final p = File('/etc/localtime').resolveSymbolicLinksSync();
     final i = p.indexOf('zoneinfo/');
     if (i >= 0) return p.substring(i + 9);
   } catch (_) {}
+  final now = DateTime.now();
+  final name = now.timeZoneName;
   const us = {
     'EST': 'America/New_York', 'EDT': 'America/New_York',
     'CST': 'America/Chicago', 'CDT': 'America/Chicago',
     'MST': 'America/Denver', 'MDT': 'America/Denver',
     'PST': 'America/Los_Angeles', 'PDT': 'America/Los_Angeles',
   };
-  return us[DateTime.now().timeZoneName] ?? 'UTC';
+  if (us[name] != null) return us[name]!;
+  const windows = {
+    'US Mountain': 'America/Phoenix', 'Mountain': 'America/Denver', 'Central Europe': 'Europe/Budapest',
+    'Central European': 'Europe/Warsaw', 'Central': 'America/Chicago', 'Eastern': 'America/New_York',
+    'Pacific': 'America/Los_Angeles', 'Alaskan': 'America/Anchorage', 'Hawaiian': 'Pacific/Honolulu',
+    'Atlantic': 'America/Halifax', 'GMT': 'Europe/London', 'W. Europe': 'Europe/Berlin',
+    'Romance': 'Europe/Paris', 'E. Europe': 'Europe/Bucharest', 'Russian': 'Europe/Moscow',
+    'AUS Eastern': 'Australia/Sydney', 'India': 'Asia/Kolkata', 'China': 'Asia/Shanghai', 'Tokyo': 'Asia/Tokyo',
+  };
+  final keys = windows.keys.toList()..sort((a, b) => b.length.compareTo(a.length));
+  for (final k in keys) {
+    if (name.startsWith('$k Standard Time') || name.startsWith('$k Daylight Time') || name.startsWith('$k Summer Time')) {
+      return windows[k]!;
+    }
+  }
+  final off = now.timeZoneOffset;
+  if (off.inMinutes % 60 == 0 && off.inHours != 0) {
+    return 'Etc/GMT${off.inHours > 0 ? '-' : '+'}${off.inHours.abs()}';
+  }
+  return 'UTC';
 }
 
 /// The box a portal sees. Serial and device ID come from the MAC (the way
