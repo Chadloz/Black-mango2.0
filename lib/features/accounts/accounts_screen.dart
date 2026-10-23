@@ -18,7 +18,7 @@ class AccountsScreen extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
           child: Row(
             children: [
-              const Text('Accounts', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: BMColors.text)),
+              Text('Accounts', style: BMFonts.titleStyle(24)),
               const Spacer(),
               OutlinedButton.icon(
                 onPressed: () => showDialog(context: context, builder: (_) => const FreeChannelsDialog()),
@@ -63,7 +63,7 @@ class _Empty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -161,24 +161,24 @@ class _AccountCard extends StatelessWidget {
                 child: Text(
                   account.name,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: BMColors.text),
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: BMColors.text),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 6),
-          Text(_host, style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 12, color: BMColors.dim)),
+          Text(_host, style: TextStyle(fontFamily: BMFonts.mono, fontSize: 12, color: BMColors.dim)),
           const SizedBox(height: 4),
           ValueListenableBuilder<Map<String, String>>(
             valueListenable: Services.catalog.status,
             builder: (context, st, _) {
               final msg = st[account.id];
-              if (msg == null) return Text(_counts, style: const TextStyle(fontSize: 13, color: BMColors.dim));
+              if (msg == null) return Text(_counts, style: TextStyle(fontSize: 13, color: BMColors.dim));
               return Row(
                 children: [
                   const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
                   const SizedBox(width: 8),
-                  Text(msg, style: const TextStyle(fontSize: 13, color: BMColors.mango)),
+                  Text(msg, style: TextStyle(fontSize: 13, color: BMColors.mango)),
                 ],
               );
             },

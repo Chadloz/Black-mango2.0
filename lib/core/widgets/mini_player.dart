@@ -269,7 +269,7 @@ class _MiniLayerState extends State<_MiniLayer> {
                 displayName(cur.name).title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: BMColors.text, fontWeight: FontWeight.w600, fontSize: 13),
+                style: TextStyle(color: BMColors.text, fontWeight: FontWeight.w600, fontSize: 13),
               ),
             ),
           ),

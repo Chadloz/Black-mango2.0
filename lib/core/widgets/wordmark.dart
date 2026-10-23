@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
+import '../../app/skins.dart';
+import 'halloween.dart';
 
 /// The Black Mango logo (assets/brand/logo.png) at a given height.
 class BrandLogo extends StatelessWidget {
@@ -8,7 +10,7 @@ class BrandLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Image.asset(
-        'assets/brand/logo.png',
+        Skins.skin.logo, // Halloween skins: the jack-o'-lantern mango
         height: height,
         filterQuality: FilterQuality.medium,
         semanticLabel: 'Black Mango',
@@ -25,7 +27,21 @@ class BrandStack extends StatelessWidget {
   Widget build(BuildContext context) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          BrandLogo(height: logoHeight),
+          // Halloween skins: a lit jack-o'-lantern on each side of the mango.
+          if (Skins.skin.halloween)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                const Pumpkin(size: 20),
+                const SizedBox(width: 6),
+                BrandLogo(height: logoHeight),
+                const SizedBox(width: 6),
+                const Pumpkin(size: 20),
+              ],
+            )
+          else
+            BrandLogo(height: logoHeight),
           const SizedBox(height: 1),
           Wordmark(size: wordSize),
         ],
@@ -40,11 +56,14 @@ class Wordmark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text.rich(
-      const TextSpan(children: [
+      TextSpan(children: [
         TextSpan(text: 'Black ', style: TextStyle(color: BMColors.text)),
         TextSpan(text: 'Mango', style: TextStyle(color: BMColors.mango)),
       ]),
-      style: TextStyle(fontFamily: BMFonts.ui, fontWeight: FontWeight.w800, fontSize: size, letterSpacing: -0.5),
+      // The skin's title font (Halloween: dripping Nosifer, which runs wide and has one weight).
+      style: Skins.skin.titleFont == null
+          ? TextStyle(fontFamily: BMFonts.ui, fontWeight: FontWeight.w800, fontSize: size, letterSpacing: -0.5)
+          : TextStyle(fontFamily: BMFonts.title, fontWeight: FontWeight.w400, fontSize: size * 0.8),
     );
   }
 }

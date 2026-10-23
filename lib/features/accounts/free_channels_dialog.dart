@@ -34,7 +34,7 @@ class FreeChannelsDialog extends StatelessWidget {
       backgroundColor: BMColors.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: BMColors.border),
+        side: BorderSide(color: BMColors.border),
       ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640, maxHeight: 760),
@@ -46,13 +46,13 @@ class FreeChannelsDialog extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(24, 20, 12, 4),
               child: Row(
                 children: [
-                  const Text('Free Channels', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: BMColors.text)),
+                  Text('Free Channels', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: BMColors.text)),
                   const Spacer(),
                   IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
                 ],
               ),
             ),
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(horizontal: 24),
               child: Text('Free public channel packs. Add one and it loads like any other account.',
                   style: TextStyle(fontSize: 13, color: BMColors.dim)),
@@ -84,9 +84,9 @@ class FreeChannelsDialog extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700, color: BMColors.text)),
+                                  Text(p.name, style: TextStyle(fontWeight: FontWeight.w700, color: BMColors.text)),
                                   const SizedBox(height: 2),
-                                  Text(p.desc, style: const TextStyle(fontSize: 12, color: BMColors.dim)),
+                                  Text(p.desc, style: TextStyle(fontSize: 12, color: BMColors.dim)),
                                 ],
                               ),
                             ),

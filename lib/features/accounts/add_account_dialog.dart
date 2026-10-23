@@ -1,4 +1,6 @@
 import 'dart:async';
+import '../../app/skins.dart';
+import '../../core/widgets/halloween.dart';
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/services.dart';
@@ -184,8 +186,10 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
       }
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
+      final overlay = Overlay.of(context, rootOverlay: true);
       Navigator.pop(context);
       messenger.showSnackBar(SnackBar(content: Text('Saved "$name". Loading...')));
+      if (Skins.skin.halloween) Ghost.boo(overlay, name); // Halloween skins: a ghost says Boo!
       final account = await Services.accounts.get(id);
       if (account != null) {
         Services.catalog.load(account).then(
@@ -219,8 +223,10 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
     }
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
+    final overlay = Overlay.of(context, rootOverlay: true);
     Navigator.pop(context);
     messenger.showSnackBar(SnackBar(content: Text('Saved ${ids.length} accounts. Loading them one at a time...')));
+    if (Skins.skin.halloween) Ghost.boo(overlay, ids.length == 1 ? ids.first.$2 : '${ids.length} accounts');
     for (final (id, name) in ids) {
       final account = await Services.accounts.get(id);
       if (account == null) continue;
@@ -240,7 +246,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
         );
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: BMColors.dim),
+      hintStyle: TextStyle(color: BMColors.dim),
       filled: true,
       fillColor: BMColors.surfaceHigh,
       suffixIcon: suffix,
@@ -326,8 +332,8 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
         tilePadding: EdgeInsets.zero,
         childrenPadding: const EdgeInsets.only(bottom: 4),
         expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
-        title: const Text('Advanced', style: TextStyle(fontSize: 13, color: BMColors.dim)),
-        subtitle: const Text(
+        title: Text('Advanced', style: TextStyle(fontSize: 13, color: BMColors.dim)),
+        subtitle: Text(
           'Serial and device ID are made from the MAC. Only fill these in if your provider gave you specific ones.',
           style: TextStyle(fontSize: 11, color: BMColors.dim),
         ),
@@ -348,7 +354,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
       backgroundColor: BMColors.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: BMColors.border),
+        side: BorderSide(color: BMColors.border),
       ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 620, maxHeight: 780),
@@ -360,7 +366,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
             children: [
               Row(
                 children: [
-                  const Text('Add Account', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: BMColors.text)),
+                  Text('Add Account', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: BMColors.text)),
                   const Spacer(),
                   IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
                 ],
@@ -384,7 +390,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(_notes.join('  '), style: const TextStyle(color: BMColors.mango, fontSize: 12)),
+                    child: Text(_notes.join('  '), style: TextStyle(color: BMColors.mango, fontSize: 12)),
                   ),
                 ],
               ),
@@ -454,7 +460,7 @@ class _Label extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Text(text, style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 11, letterSpacing: 1.5, color: BMColors.dim)),
+      child: Text(text, style: TextStyle(fontFamily: BMFonts.mono, fontSize: 11, letterSpacing: 1.5, color: BMColors.dim)),
     );
   }
 }

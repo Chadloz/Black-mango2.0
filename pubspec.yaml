@@ -76,6 +76,9 @@ flutter:
     - assets/brand/
 
   fonts:
+    - family: Nosifer
+      fonts:
+        - asset: assets/fonts/Nosifer.ttf
     - family: Outfit
       fonts:
         - asset: assets/fonts/Outfit.ttf

@@ -187,7 +187,7 @@ class UpNextCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Up next · ${pb.upNextIn.value}s',
-                          style: const TextStyle(color: BMColors.mango, fontSize: 12, fontWeight: FontWeight.w700)),
+                          style: TextStyle(color: BMColors.mango, fontSize: 12, fontWeight: FontWeight.w700)),
                       const SizedBox(height: 4),
                       Text(label,
                           maxLines: 2,

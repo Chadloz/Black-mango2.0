@@ -27,7 +27,7 @@ class AccountPicker extends StatelessWidget {
         MenuItemButton(
           onPressed: () => onChanged(<String>{}),
           leadingIcon: selected.isEmpty
-              ? const Icon(Icons.check, size: 18, color: BMColors.mango)
+              ? Icon(Icons.check, size: 18, color: BMColors.mango)
               : const SizedBox(width: 18),
           child: const Text('All accounts'),
         ),

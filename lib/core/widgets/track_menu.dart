@@ -65,7 +65,7 @@ class VolumeButton extends StatelessWidget {
                       width: 46,
                       child: Text('${v.round()}%',
                           textAlign: TextAlign.right,
-                          style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 12, color: BMColors.text)),
+                          style: TextStyle(fontFamily: BMFonts.mono, fontSize: 12, color: BMColors.text)),
                     ),
                   ],
                 ),
@@ -99,7 +99,7 @@ class HandOffOverlay extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.open_in_new, size: 40, color: BMColors.mango),
+              Icon(Icons.open_in_new, size: 40, color: BMColors.mango),
               const SizedBox(height: 12),
               const Text('Playing in VLC',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white)),
@@ -267,11 +267,11 @@ class TrackMenu extends StatelessWidget {
               builder: (context, visible, _) {
                 final subsOn = visible && cur.subtitle.id != 'no';
                 Widget mark(bool on) =>
-                    on ? const Icon(Icons.check, size: 18, color: BMColors.mango) : const SizedBox(width: 18);
+                    on ? Icon(Icons.check, size: 18, color: BMColors.mango) : const SizedBox(width: 18);
                 Widget header(String t) => Padding(
                       padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
                       child: Text(t,
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontFamily: BMFonts.mono, fontSize: 11, letterSpacing: 1.5, color: BMColors.dim)),
                     );
                 return MenuAnchor(

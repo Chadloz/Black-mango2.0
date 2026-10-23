@@ -13,6 +13,18 @@ Why things are the way they are. Newest first within each section. No portal URL
   python3 "$(ls -t ~/Downloads/NAME*.py | head -1)"
 - Development chats live in the Black Mango Project so later sessions can search them. This file is the short version.
 
+## Lists keep your spot (October 2026)
+
+- Live TV, Movies and Shows remember where you scrolled. Shrinking to the floating player or switching layouts no longer resets the list; only your own scrolling moves it.
+- Small Top and Bottom buttons sit at the bottom-right of each list. Shortcuts: Home (top), End (bottom), and B to go back to where you were before the last jump (press again to swap back). The arrow keys stay for moving around. All three can be changed in Settings like the other shortcuts.
+
+## Skins (October 2026)
+
+- Every color comes from a skin's 7 slots: background, panels, raised panels, borders, accent (Black Mango's orange), text, and dim text. A skin can also bring its own logo, title font and decorations. Picked any time in Settings > Appearance, where each skin's card is drawn in its own colors; the whole app repaints right away without losing your place. Player icons stay white for readability; progress bars and highlights use the skin's accent.
+- First skins (test build 6): Black Mango (the default) and a Halloween pack of four: Pumpkin Patch (pumpkin orange on near-black purple), Witching Hour (witch purple on indigo), Blood Moon (crimson on black-red), Graveyard Fog (toxic green on dark green-gray).
+- Every Halloween skin has: the jack-o'-lantern mango logo (the scary face, carved into the dark skin and glowing), two lit pumpkins beside it with a candle flicker, bats in the top bar, cobweb corners, a faint fog along the bottom, the dripping Nosifer font for the wordmark and screen titles (SIL Open Font License, bundled), and a cute sheet ghost that floats up from a random corner and says "Boo! <account> added" when you add an account.
+- Next: the custom skin editor (color wheel, a screen-wide eyedropper, optional textures), on the same system.
+
 ## Smoother live TV (October 2026)
 
 - Jumps and blocks (October 2026, test build 4): some providers hang up every few seconds during busy events and come back at "live", so footage is lost and the next frames refer to pictures we never got. Black Mango now tells a clean reconnect (the provider replays a little, so nothing is lost) from one that lost footage. After a loss, or when the provider restarts its clock, it holds the last clean picture (sound keeps going) until the next full frame, so there are no blocks. The log says how many seconds were lost.
@@ -36,7 +48,7 @@ Why things are the way they are. Newest first within each section. No portal URL
 
 1. Release setup: test builds as GitHub pre-releases, with working updates.
 2. Windows (first test build: v2.0.0-beta.3).
-3. Skins, the very last thing before the drop: built-in skins, plus making your own by picking colors for the parts we expose, optionally with textures.
+3. Skins, the very last thing before the drop: built-in skins (the Halloween pack came first, in test build 6), plus making your own by picking colors for the parts we expose, optionally with textures.
 4. Public release (2.0.0), plus a final 1.x update that says 2.0 is here, with a download button.
 
 ## Releases and updates (October 2026)

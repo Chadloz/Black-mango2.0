@@ -93,7 +93,7 @@ class _DetailsPanelState extends State<DetailsPanel> {
     final placeholder = Container(
       color: BMColors.surfaceHigh,
       alignment: Alignment.center,
-      child: const Icon(Icons.movie, color: BMColors.dim, size: 40),
+      child: Icon(Icons.movie, color: BMColors.dim, size: 40),
     );
     final seasons = d == null ? <int>[] : (d.seasons.keys.toList()..sort());
     final episodes = (d == null || _season == null) ? <EpisodeInfo>[] : (d.seasons[_season] ?? <EpisodeInfo>[]);
@@ -139,19 +139,19 @@ class _DetailsPanelState extends State<DetailsPanel> {
                         Text(displayName(widget.item.name).title,
                             maxLines: 3,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: BMColors.text)),
+                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: BMColors.text)),
                         if (displayName(widget.item.name).tags.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: TagChips(displayName(widget.item.name).tags, size: 11, max: 6),
                           ),
                         const SizedBox(height: 8),
-                        if (meta.isNotEmpty) Text(meta, style: const TextStyle(fontSize: 13, color: BMColors.dim)),
+                        if (meta.isNotEmpty) Text(meta, style: TextStyle(fontSize: 13, color: BMColors.dim)),
                         if (widget.accountName.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(widget.accountName,
-                                style: const TextStyle(fontSize: 12, color: BMColors.mango, fontWeight: FontWeight.w600)),
+                                style: TextStyle(fontSize: 12, color: BMColors.mango, fontWeight: FontWeight.w600)),
                           ),
                         const SizedBox(height: 16),
                         Wrap(
@@ -191,16 +191,16 @@ class _DetailsPanelState extends State<DetailsPanel> {
               const SizedBox(height: 20),
               if (_loading) const LinearProgressIndicator(),
               if (_err != null)
-                Text("Couldn't load details: $_err", style: const TextStyle(color: BMColors.dim)),
+                Text("Couldn't load details: $_err", style: TextStyle(color: BMColors.dim)),
               if (d != null && d.plot.isNotEmpty)
-                Text(d.plot, style: const TextStyle(fontSize: 15, height: 1.5, color: BMColors.text)),
+                Text(d.plot, style: TextStyle(fontSize: 15, height: 1.5, color: BMColors.text)),
               if (d != null && d.cast.isNotEmpty) _kv('Cast', d.cast),
               if (d != null && d.director.isNotEmpty) _kv('Director', d.director),
               if (seasons.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 Row(
                   children: [
-                    const Text('Episodes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: BMColors.text)),
+                    Text('Episodes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: BMColors.text)),
                     const Spacer(),
                     DropdownButton<int>(
                       value: _season,
@@ -214,7 +214,7 @@ class _DetailsPanelState extends State<DetailsPanel> {
                 for (final ep in episodes) _EpisodeRow(ep: ep, onTap: () => _playEp(ep)),
               ],
               if (d != null && !_loading && widget.item.kind == 'series' && seasons.isEmpty && !_canPlayDirect)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(top: 16),
                   child: Text('No episodes found for this show.', style: TextStyle(color: BMColors.dim)),
                 ),
@@ -235,8 +235,8 @@ class _DetailsPanelState extends State<DetailsPanel> {
       padding: const EdgeInsets.only(top: 12),
       child: Text.rich(
         TextSpan(children: [
-          TextSpan(text: '$k: ', style: const TextStyle(color: BMColors.dim)),
-          TextSpan(text: v, style: const TextStyle(color: BMColors.text)),
+          TextSpan(text: '$k: ', style: TextStyle(color: BMColors.dim)),
+          TextSpan(text: v, style: TextStyle(color: BMColors.text)),
         ]),
         style: const TextStyle(fontSize: 13),
       ),
@@ -254,7 +254,7 @@ class _EpisodeRow extends StatelessWidget {
     final thumbFallback = Container(
       color: BMColors.surfaceHigh,
       alignment: Alignment.center,
-      child: Text('${ep.number}', style: const TextStyle(fontFamily: BMFonts.mono, color: BMColors.dim, fontSize: 18)),
+      child: Text('${ep.number}', style: TextStyle(fontFamily: BMFonts.mono, color: BMColors.dim, fontSize: 18)),
     );
     return InkWell(
       onTap: onTap,
@@ -283,18 +283,18 @@ class _EpisodeRow extends StatelessWidget {
                     '${ep.number}.  ${ep.title.isEmpty ? 'Episode ${ep.number}' : ep.title}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w600, color: BMColors.text),
+                    style: TextStyle(fontWeight: FontWeight.w600, color: BMColors.text),
                   ),
                   if (ep.duration.isNotEmpty)
-                    Text(ep.duration, style: const TextStyle(fontSize: 12, color: BMColors.dim)),
+                    Text(ep.duration, style: TextStyle(fontSize: 12, color: BMColors.dim)),
                   if (ep.plot.isNotEmpty)
                     Text(ep.plot,
                         maxLines: 2, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12, color: BMColors.dim, height: 1.4)),
+                        style: TextStyle(fontSize: 12, color: BMColors.dim, height: 1.4)),
                 ],
               ),
             ),
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 22),
               child: Icon(Icons.play_circle_outline, color: BMColors.mango),
             ),

@@ -65,7 +65,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   @override
   Widget build(BuildContext context) {
     if (!_loading && _items.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -102,7 +102,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     selected: _filter == k,
                     showCheckmark: false,
                     onSelected: (_) => setState(() => _filter = k),
-                    selectedColor: const Color(0x33FF8C00),
+                    selectedColor: BMColors.mango.withAlpha(0x33),
                     labelStyle: TextStyle(color: _filter == k ? BMColors.mango : BMColors.text),
                     side: BorderSide(color: _filter == k ? BMColors.mango : BMColors.border),
                   ),
@@ -152,7 +152,7 @@ class _FavTile extends StatelessWidget {
         padding: const EdgeInsets.all(10),
         child: Text(item.name,
             textAlign: TextAlign.center, maxLines: 4, overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: BMColors.dim, fontSize: 13)),
+            style: TextStyle(color: BMColors.dim, fontSize: 13)),
       ),
     );
     final art = item.logo.startsWith('http')
@@ -187,7 +187,7 @@ class _FavTile extends StatelessWidget {
                   child: IconButton.filledTonal(
                     tooltip: 'Remove from favorites',
                     onPressed: onUnfav,
-                    icon: const Icon(Icons.star, color: BMColors.mango, size: 18),
+                    icon: Icon(Icons.star, color: BMColors.mango, size: 18),
                   ),
                 ),
               ],
@@ -196,10 +196,10 @@ class _FavTile extends StatelessWidget {
           const SizedBox(height: 6),
           Text(item.name,
               maxLines: 2, overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: BMColors.text)),
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: BMColors.text)),
           Text(accountName.isEmpty ? kindLabel : '$kindLabel   $accountName',
               maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 11, color: BMColors.mango, fontWeight: FontWeight.w600)),
+              style: TextStyle(fontSize: 11, color: BMColors.mango, fontWeight: FontWeight.w600)),
         ],
       ),
     );

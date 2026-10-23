@@ -12,12 +12,14 @@ import 'core/widgets/mini_player.dart';
 import 'package:window_manager/window_manager.dart';
 import 'core/playback/still_watching.dart';
 import 'core/updates.dart';
+import 'app/skins.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   AppLog.start();
   MediaKit.ensureInitialized();
   await Prefs.init();
+  Skins.load(); // the skin you picked last time (Settings > Appearance)
   await windowManager.ensureInitialized();
   Services.init();
   Session.start();

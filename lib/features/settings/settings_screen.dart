@@ -10,6 +10,7 @@ import '../../core/backup.dart';
 import '../../core/playback/still_watching.dart';
 import '../../core/playback/live_buffer.dart';
 import '../../core/updates.dart';
+import '../../app/skins.dart';
 
 const _langOptions = [
   ('', 'Automatic'),
@@ -134,7 +135,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
       children: [
-        const Text('Settings', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: BMColors.text)),
+        Text('Settings', style: BMFonts.titleStyle(24)),
+
+        _section('APPEARANCE'),
+        _row(
+          'Skin',
+          const SizedBox.shrink(),
+          sub: 'Changes the colors of the whole app. The Halloween skins also bring a jack-o\'-lantern mango, '
+              'lit pumpkins, bats, cobwebs, a little fog, and a ghost who says Boo! when you add an account.',
+        ),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [for (final s in Skins.all) _SkinCard(skin: s, onTap: () => Skins.pick(s))],
+        ),
 
         _section('PLAYBACK'),
         _row(
@@ -398,7 +412,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
 
         _section('ABOUT'),
-        const Row(
+        Row(
           children: [
             BrandLogo(height: 40),
             SizedBox(width: 12),
@@ -428,7 +442,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _section(String t) => Padding(
         padding: const EdgeInsets.only(top: 28, bottom: 8),
-        child: Text(t, style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 11, letterSpacing: 1.5, color: BMColors.dim)),
+        child: Text(t, style: TextStyle(fontFamily: BMFonts.mono, fontSize: 11, letterSpacing: 1.5, color: BMColors.dim)),
       );
 
   Widget _row(String title, Widget control, {String? sub}) => Padding(
@@ -439,11 +453,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(color: BMColors.text, fontSize: 15)),
+                  Text(title, style: TextStyle(color: BMColors.text, fontSize: 15)),
                   if (sub != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
-                      child: Text(sub, style: const TextStyle(color: BMColors.dim, fontSize: 12)),
+                      child: Text(sub, style: TextStyle(color: BMColors.dim, fontSize: 12)),
                     ),
                 ],
               ),
@@ -469,10 +483,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             SizedBox(
               width: 110,
-              child: Text(key, style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 13, color: BMColors.mango)),
+              child: Text(key, style: TextStyle(fontFamily: BMFonts.mono, fontSize: 13, color: BMColors.mango)),
             ),
-            Text(what, style: const TextStyle(color: BMColors.text, fontSize: 14)),
+            Text(what, style: TextStyle(color: BMColors.text, fontSize: 14)),
           ],
         ),
       );
+}
+
+/// One skin in Settings > Appearance: drawn in its own colors, so the card is the preview.
+class _SkinCard extends StatelessWidget {
+  final Skin skin;
+  final VoidCallback onTap;
+  const _SkinCard({required this.skin, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final on = Skins.skin.id == skin.id;
+    Widget dot(Color c) => Container(
+          width: 14,
+          height: 14,
+          margin: const EdgeInsets.only(right: 4),
+          decoration: BoxDecoration(color: c, shape: BoxShape.circle, border: Border.all(color: skin.border)),
+        );
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 190,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: skin.background,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: on ? skin.accent : skin.border, width: on ? 2 : 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Image.asset(skin.logo, height: 28),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(skin.group.toUpperCase(),
+                      style: TextStyle(fontFamily: BMFonts.mono, fontSize: 10, letterSpacing: 1.5, color: skin.dim)),
+                ),
+                if (on) Icon(Icons.check_circle, color: skin.accent, size: 18),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(skin.name,
+                style: TextStyle(
+                    fontFamily: skin.titleFont ?? BMFonts.ui,
+                    fontSize: skin.titleFont != null ? 13 : 15,
+                    fontWeight: skin.titleFont != null ? FontWeight.w400 : FontWeight.w700,
+                    color: skin.text)),
+            const SizedBox(height: 8),
+            Row(children: [dot(skin.surface), dot(skin.surfaceHigh), dot(skin.accent), dot(skin.text), dot(skin.dim)]),
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -7,6 +7,7 @@ import '../../core/services.dart';
 import '../../core/storage/database.dart';
 import '../../core/widgets/account_picker.dart';
 import '../../core/widgets/tag_chips.dart';
+import '../../core/widgets/keep_scroll.dart';
 import '../../core/catalog/display_name.dart';
 import '../../core/widgets/filter_menu.dart';
 import '../../core/widgets/track_menu.dart';
@@ -42,7 +43,7 @@ class _LiveScreenState extends State<LiveScreen> {
   int _gen = 0;
   Timer? _debounce;
   StreamSubscription<List<Account>>? _acctSub;
-  final _scroll = ScrollController();
+  final _scroll = KeepScrollController(screen: 1); // keeps your spot through the floating player
   final _searchCtrl = TextEditingController(); // keeps search text across layout changes
   int _sel = -1; // keyboard selection in the list
   StreamSubscription<HK>? _hkSub;
@@ -275,7 +276,7 @@ class _LiveScreenState extends State<LiveScreen> {
                     _loading ? 'Loading...' : '${_fmt(_items.length)} channels',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 11, color: BMColors.dim),
+                    style: TextStyle(fontFamily: BMFonts.mono, fontSize: 11, color: BMColors.dim),
                   ),
                 ),
                 MenuAnchor(
@@ -292,10 +293,10 @@ class _LiveScreenState extends State<LiveScreen> {
                   ],
                   builder: (context, ctrl, _) => TextButton.icon(
                     onPressed: () => ctrl.isOpen ? ctrl.close() : ctrl.open(),
-                    icon: const Icon(Icons.sort, size: 14, color: BMColors.dim),
+                    icon: Icon(Icons.sort, size: 14, color: BMColors.dim),
                     label: Text(
                       'Sort: ${Prefs.getStr('live.sort') == 'az' ? 'A–Z' : 'Provider order'}',
-                      style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 11, color: BMColors.dim),
+                      style: TextStyle(fontFamily: BMFonts.mono, fontSize: 11, color: BMColors.dim),
                     ),
                   ),
                 ),
@@ -355,7 +356,7 @@ class _LiveScreenState extends State<LiveScreen> {
                   _onSearch('');
                 },
               ),
-        prefixIcon: const Icon(Icons.search, color: BMColors.dim),
+        prefixIcon: Icon(Icons.search, color: BMColors.dim),
         isDense: true,
         filled: true,
         fillColor: BMColors.surfaceHigh,
@@ -492,13 +493,15 @@ class _LiveScreenState extends State<LiveScreen> {
       return Center(
         child: _loading
             ? const CircularProgressIndicator()
-            : const Text('No channels match. Load an account in Accounts, or loosen the filters.',
+            : Text('No channels match. Load an account in Accounts, or loosen the filters.',
                 style: TextStyle(color: BMColors.dim)),
       );
     }
     // Number column fits the biggest number in the list, plus a little gap.
     final numberWidth = Prefs.getBool('live.hideNumbers') ? 0.0 : _items.length.toString().length * 7.5 + 10;
-    return ListView.builder(
+    return Stack(
+      children: [
+        ListView.builder(
       controller: _scroll,
       itemCount: _items.length,
       itemExtent: 60,
@@ -516,6 +519,10 @@ class _LiveScreenState extends State<LiveScreen> {
           selected: i == _sel,
         );
       },
+    ),
+        // Jump to the top or bottom; B (or the shortcut you set) goes back to where you were.
+        Positioned(right: 10, bottom: 10, child: JumpButtons(controller: _scroll)),
+      ],
     );
   }
 }
@@ -532,7 +539,7 @@ class _PlayerArea extends StatelessWidget {
       return Container(
         color: Colors.black,
         alignment: Alignment.center,
-        child: const Text('Select a channel to begin', style: TextStyle(color: BMColors.dim, fontSize: 16)),
+        child: Text('Select a channel to begin', style: TextStyle(color: BMColors.dim, fontSize: 16)),
       );
     }
     return Container(
@@ -562,7 +569,7 @@ class _PlayerArea extends StatelessWidget {
                           : Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
-                              child: Text(msg, style: const TextStyle(color: BMColors.mango, fontWeight: FontWeight.w600)),
+                              child: Text(msg, style: TextStyle(color: BMColors.mango, fontWeight: FontWeight.w600)),
                             );
                     },
                   ),
@@ -578,8 +585,8 @@ class _PlayerArea extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text.rich(
               TextSpan(children: [
-                TextSpan(text: displayName(cur.name).title, style: const TextStyle(fontWeight: FontWeight.w700, color: BMColors.text)),
-                TextSpan(text: '   ${acctNames[cur.accountId] ?? ''}', style: const TextStyle(color: BMColors.mango)),
+                TextSpan(text: displayName(cur.name).title, style: TextStyle(fontWeight: FontWeight.w700, color: BMColors.text)),
+                TextSpan(text: '   ${acctNames[cur.accountId] ?? ''}', style: TextStyle(color: BMColors.mango)),
               ]),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -606,7 +613,7 @@ class _Pill extends StatelessWidget {
         selected: selected,
         showCheckmark: false,
         onSelected: (_) => onTap(),
-        selectedColor: const Color(0x33FF8C00),
+        selectedColor: BMColors.mango.withAlpha(0x33),
         labelStyle: TextStyle(color: selected ? BMColors.mango : BMColors.text),
         side: BorderSide(color: selected ? BMColors.mango : BMColors.border),
       ),
@@ -642,15 +649,15 @@ class _ChannelRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: active ? const Color(0x22FF8C00) : (selected ? const Color(0x18FFFFFF) : null),
-          border: const Border(bottom: BorderSide(color: BMColors.border, width: 0.5)),
+          color: active ? BMColors.mango.withAlpha(0x22) : (selected ? const Color(0x18FFFFFF) : null),
+          border: Border(bottom: BorderSide(color: BMColors.border, width: 0.5)),
         ),
         child: Row(
           children: [
             if (numberWidth > 0)
             SizedBox(
               width: numberWidth,
-              child: Text('${index + 1}', style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 12, color: BMColors.dim)),
+              child: Text('${index + 1}', style: TextStyle(fontFamily: BMFonts.mono, fontSize: 12, color: BMColors.dim)),
             ),
             _Logo(url: item.logo, name: item.name),
             const SizedBox(width: 12),
@@ -678,9 +685,9 @@ class _ChannelRow extends StatelessWidget {
                   ),
                   Text.rich(
                     TextSpan(children: [
-                      TextSpan(text: sub, style: const TextStyle(color: BMColors.dim)),
+                      TextSpan(text: sub, style: TextStyle(color: BMColors.dim)),
                       if (accountName.isNotEmpty)
-                        TextSpan(text: '   $accountName', style: const TextStyle(color: BMColors.mango, fontWeight: FontWeight.w600)),
+                        TextSpan(text: '   $accountName', style: TextStyle(color: BMColors.mango, fontWeight: FontWeight.w600)),
                     ]),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -689,7 +696,7 @@ class _ChannelRow extends StatelessWidget {
                 ],
               ),
             ),
-            if (active) const Icon(Icons.graphic_eq, color: BMColors.mango, size: 18),
+            if (active) Icon(Icons.graphic_eq, color: BMColors.mango, size: 18),
             IconButton(
               tooltip: isFav ? 'Remove from favorites' : 'Add to favorites',
               onPressed: onFav,
@@ -718,7 +725,7 @@ class _Logo extends StatelessWidget {
       height: 44,
       alignment: Alignment.center,
       decoration: BoxDecoration(color: BMColors.surfaceHigh, borderRadius: BorderRadius.circular(8)),
-      child: Text(initials, style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 12, color: BMColors.dim)),
+      child: Text(initials, style: TextStyle(fontFamily: BMFonts.mono, fontSize: 12, color: BMColors.dim)),
     );
     if (!url.startsWith('http')) return fallback;
     return ClipRRect(

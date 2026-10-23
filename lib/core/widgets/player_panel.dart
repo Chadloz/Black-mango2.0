@@ -40,7 +40,7 @@ class PlayerPanel extends StatelessWidget {
                           : Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
-                              child: Text(msg, style: const TextStyle(color: BMColors.mango, fontWeight: FontWeight.w600)),
+                              child: Text(msg, style: TextStyle(color: BMColors.mango, fontWeight: FontWeight.w600)),
                             );
                     },
                   ),
@@ -65,9 +65,9 @@ class PlayerPanel extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text.rich(
               TextSpan(children: [
-                TextSpan(text: item.name, style: const TextStyle(fontWeight: FontWeight.w700, color: BMColors.text)),
+                TextSpan(text: item.name, style: TextStyle(fontWeight: FontWeight.w700, color: BMColors.text)),
                 if (accountName.isNotEmpty)
-                  TextSpan(text: '   $accountName', style: const TextStyle(color: BMColors.mango)),
+                  TextSpan(text: '   $accountName', style: TextStyle(color: BMColors.mango)),
               ]),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

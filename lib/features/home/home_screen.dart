@@ -87,9 +87,9 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             const BrandLogo(height: 140),
             const SizedBox(height: 16),
-            const Text('Welcome to Black Mango', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: BMColors.text)),
+            Text('Welcome to Black Mango', style: BMFonts.titleStyle(26)),
             const SizedBox(height: 8),
-            const Text('Add an account or a free channel pack to get started.', style: TextStyle(color: BMColors.dim)),
+            Text('Add an account or a free channel pack to get started.', style: TextStyle(color: BMColors.dim)),
             const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: () => AppNav.index.value = AppNav.accounts,
@@ -101,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
     if (_continue.isEmpty && _channels.isEmpty && _favs.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -191,7 +191,7 @@ class _Row extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: BMColors.text)),
+              Text(title, style: BMFonts.titleStyle(20)),
               const Spacer(),
               if (onSeeAll != null) TextButton(onPressed: onSeeAll, child: const Text('See all')),
             ],
@@ -228,7 +228,7 @@ class _Card extends StatelessWidget {
         padding: const EdgeInsets.all(10),
         child: Text(title,
             textAlign: TextAlign.center, maxLines: 4, overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: BMColors.dim, fontSize: 13)),
+            style: TextStyle(color: BMColors.dim, fontSize: 13)),
       ),
     );
     return SizedBox(
@@ -274,11 +274,11 @@ class _Card extends StatelessWidget {
             const SizedBox(height: 6),
             Text(title,
                 maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: BMColors.text)),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: BMColors.text)),
             if (subtitle.isNotEmpty)
               Text(subtitle,
                   maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, color: BMColors.mango, fontWeight: FontWeight.w600)),
+                  style: TextStyle(fontSize: 11, color: BMColors.mango, fontWeight: FontWeight.w600)),
           ],
         ),
       ),

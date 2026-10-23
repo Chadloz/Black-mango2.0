@@ -15,6 +15,7 @@ import '../prefs.dart';
 import '../catalog/stalker_groups.dart';
 import '../catalog/display_name.dart';
 import 'tag_chips.dart';
+import 'keep_scroll.dart';
 
 String _fmt(int n) => n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
 
@@ -56,7 +57,7 @@ class _PosterBrowserState extends State<PosterBrowser> {
   int _gen = 0;
   Timer? _debounce;
   StreamSubscription<List<Account>>? _acctSub;
-  final _scroll = ScrollController();
+  late final _scroll = KeepScrollController(screen: widget.kind == 'series' ? 3 : 2); // keeps your spot
   final _searchCtrl = TextEditingController(); // keeps search text across layout changes
   double? _guideW;
   Item? _selected; // title whose details are open
@@ -431,7 +432,7 @@ class _PosterBrowserState extends State<PosterBrowser> {
                   _onSearch('');
                 },
               ),
-        prefixIcon: const Icon(Icons.search, color: BMColors.dim),
+        prefixIcon: Icon(Icons.search, color: BMColors.dim),
         isDense: true,
         filled: true,
         fillColor: BMColors.surfaceHigh,
@@ -540,7 +541,7 @@ class _PosterBrowserState extends State<PosterBrowser> {
                       ? 'Loading...'
                       : '${_fmt(_items.length)} ${widget.noun}'
                           '${_stalkerAcct != null && _groupId != null && _query.trim().isEmpty ? ' · ${stalkerGroupLabel(_groupId!)}' : ''}'),
-              style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 11, color: BMColors.dim),
+              style: TextStyle(fontFamily: BMFonts.mono, fontSize: 11, color: BMColors.dim),
             ),
           ),
         ),
@@ -555,7 +556,7 @@ class _PosterBrowserState extends State<PosterBrowser> {
                               : _stalkerAcct != null
                                   ? 'Nothing here yet. Pick a group under Categories, or press Enter to search the portal.'
                                   : 'No ${widget.noun} match. Load an account in Accounts, or loosen the filters.',
-                          style: const TextStyle(color: BMColors.dim)),
+                          style: TextStyle(color: BMColors.dim)),
                 )
               : Row(
                   children: [
@@ -576,7 +577,9 @@ class _PosterBrowserState extends State<PosterBrowser> {
       final tileW = (usable - spacing * (count - 1)) / count;
       _cols = count;
       _rowExtent = tileW / aspect + spacing;
-      return GridView.builder(
+      return Stack(
+      children: [
+        GridView.builder(
         controller: _scroll,
         padding: const EdgeInsets.fromLTRB(pad, 0, pad, 16),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -600,7 +603,11 @@ class _PosterBrowserState extends State<PosterBrowser> {
             onFav: () => Services.favorites.toggle(it),
           );
         },
-      );
+      ),
+        // Jump to the top or bottom; B (or the shortcut you set) goes back to where you were.
+        Positioned(right: 10, bottom: 10, child: JumpButtons(controller: _scroll)),
+      ],
+    );
     });
   }
 
@@ -646,7 +653,7 @@ class _GroupPicker extends StatelessWidget {
         dense: true,
         title: Text(label,
             style: TextStyle(color: on ? BMColors.mango : BMColors.text, fontWeight: on ? FontWeight.w600 : null)),
-        trailing: on ? const Icon(Icons.check, size: 18, color: BMColors.mango) : null,
+        trailing: on ? Icon(Icons.check, size: 18, color: BMColors.mango) : null,
         onTap: () => Navigator.pop(context, id),
       );
     }
@@ -683,7 +690,7 @@ class _Pill extends StatelessWidget {
         selected: selected,
         showCheckmark: false,
         onSelected: (_) => onTap(),
-        selectedColor: const Color(0x33FF8C00),
+        selectedColor: BMColors.mango.withAlpha(0x33),
         labelStyle: TextStyle(color: selected ? BMColors.mango : BMColors.text),
         side: BorderSide(color: selected ? BMColors.mango : BMColors.border),
       ),
@@ -708,7 +715,7 @@ class _PosterTile extends StatelessWidget {
         padding: const EdgeInsets.all(10),
         child: Text(dn.title,
             textAlign: TextAlign.center, maxLines: 4, overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: BMColors.dim, fontSize: 13)),
+            style: TextStyle(color: BMColors.dim, fontSize: 13)),
       ),
     );
     return InkWell(
@@ -757,7 +764,7 @@ class _PosterTile extends StatelessWidget {
           if (accountName.isNotEmpty)
             Text(accountName,
                 maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 11, color: BMColors.mango, fontWeight: FontWeight.w600)),
+                style: TextStyle(fontSize: 11, color: BMColors.mango, fontWeight: FontWeight.w600)),
         ],
       ),
     );

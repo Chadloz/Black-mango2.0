@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'nav.dart';
 import '../core/widgets/wordmark.dart';
+import '../core/widgets/halloween.dart';
+import 'skins.dart';
 import '../features/home/home_screen.dart';
 import '../features/live/live_screen.dart';
 import '../features/movies/movies_screen.dart';
@@ -77,7 +79,10 @@ class _ShellState extends State<Shell> {
   Widget build(BuildContext context) {
     final current = _items[_index].label!;
     return Scaffold(
-      body: Column(
+      // Halloween skins lay cobweb corners and a faint fog over the app (never takes clicks).
+      body: Stack(
+        children: [
+          Positioned.fill(child: Column(
         children: [
           _TopBar(section: current, onMenu: () => setState(() => _expanded = !_expanded)),
           const Divider(height: 1),
@@ -95,6 +100,9 @@ class _ShellState extends State<Shell> {
               ],
             ),
           ),
+        ],
+      )),
+          if (Skins.skin.halloween) const Positioned.fill(child: HalloweenDecor()),
         ],
       ),
     );
@@ -117,14 +125,15 @@ class _TopBar extends StatelessWidget {
           IconButton(
             onPressed: onMenu,
             tooltip: 'Menu',
-            icon: const Icon(Icons.menu, color: BMColors.text),
+            icon: Icon(Icons.menu, color: BMColors.text),
           ),
           const SizedBox(width: 8),
           const BrandStack(),
+          if (Skins.skin.halloween) ...[const SizedBox(width: 28), const Bats()],
           const Spacer(),
           Text(
             section.toUpperCase(),
-            style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 12, letterSpacing: 2, color: BMColors.dim),
+            style: TextStyle(fontFamily: BMFonts.mono, fontSize: 12, letterSpacing: 2, color: BMColors.dim),
           ),
           const SizedBox(width: 8),
         ],
@@ -149,7 +158,7 @@ class _Sidebar extends StatelessWidget {
         children.add(expanded
             ? Padding(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-                child: Text(e.header!, style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 11, letterSpacing: 2, color: BMColors.dim)),
+                child: Text(e.header!, style: TextStyle(fontFamily: BMFonts.mono, fontSize: 11, letterSpacing: 2, color: BMColors.dim)),
               )
             : const Padding(
                 padding: EdgeInsets.symmetric(vertical: 10, horizontal: 16),
@@ -182,7 +191,7 @@ class _SidebarItem extends StatelessWidget {
     final row = Container(
       height: 48,
       decoration: BoxDecoration(
-        color: selected ? const Color(0x22FF8C00) : Colors.transparent,
+        color: selected ? BMColors.mango.withAlpha(0x22) : Colors.transparent,
         border: Border(left: BorderSide(color: selected ? BMColors.mango : Colors.transparent, width: 3)),
       ),
       padding: EdgeInsets.symmetric(horizontal: expanded ? 16 : 0),

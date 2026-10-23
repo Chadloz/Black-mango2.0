@@ -7,6 +7,7 @@ import 'prefs.dart';
 import 'services.dart';
 import 'widgets/player_controls.dart';
 import 'widgets/mini_player.dart';
+import 'widgets/keep_scroll.dart';
 
 /// Every action a key can trigger.
 enum HK {
@@ -28,6 +29,9 @@ enum HK {
   channelNext,
   channelPrev,
   popOut,
+  listTop,
+  listBottom,
+  listBack,
 }
 
 const hkLabels = {
@@ -49,6 +53,9 @@ const hkLabels = {
   HK.channelNext: 'Next episode / channel',
   HK.channelPrev: 'Previous episode / channel',
   HK.popOut: 'Float over other apps (and back)',
+  HK.listTop: 'Jump to the top of the list',
+  HK.listBottom: 'Jump to the bottom of the list',
+  HK.listBack: 'Back to where you were in the list',
 };
 
 /// Added to a key id to mean "with Shift held".
@@ -73,6 +80,9 @@ final _defaults = <HK, int>{
   HK.channelPrev: LogicalKeyboardKey.arrowLeft.keyId,
   HK.channelNext: LogicalKeyboardKey.arrowRight.keyId,
   HK.popOut: LogicalKeyboardKey.keyP.keyId,
+  HK.listTop: LogicalKeyboardKey.home.keyId,
+  HK.listBottom: LogicalKeyboardKey.end.keyId,
+  HK.listBack: LogicalKeyboardKey.keyB.keyId,
 };
 
 /// How Settings groups the shortcuts: (title, note, actions).
@@ -98,6 +108,7 @@ const hkSections = <(String, String, List<HK>)>[
     ]
   ),
   ('MINI PLAYER', '', [HK.popOut]),
+  ('LISTS', 'Live TV, Movies and Shows.', [HK.listTop, HK.listBottom, HK.listBack]),
   ('LIVE TV', 'While a channel plays, type its number to jump to it.', [HK.navUp, HK.navDown, HK.playSelected]),
 ];
 
@@ -301,6 +312,12 @@ class Hotkeys {
       case HK.backToLast:
         AppNav.index.value = _prev;
         return true;
+      case HK.listTop:
+        return KeepScrollController.on(AppNav.index.value)?.toTop() ?? false;
+      case HK.listBottom:
+        return KeepScrollController.on(AppNav.index.value)?.toBottom() ?? false;
+      case HK.listBack:
+        return KeepScrollController.on(AppNav.index.value)?.back() ?? false;
       case HK.channelNext:
       case HK.channelPrev:
         // Previous/next: episodes when watching a show, channels on live TV.
@@ -335,7 +352,7 @@ class ChannelNumberBadge extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(10)),
             child: Text('Ch $v',
-                style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 28, fontWeight: FontWeight.w700, color: BMColors.mango)),
+                style: TextStyle(fontFamily: BMFonts.mono, fontSize: 28, fontWeight: FontWeight.w700, color: BMColors.mango)),
           ),
         );
       },
@@ -399,7 +416,7 @@ class _HotkeyEditorState extends State<HotkeyEditor> {
       children: [
         Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
                 'Click a shortcut, then press the new key. Hold Shift while pressing it for a Shift combo. Esc cancels. Shortcuts work anywhere except while typing in a text box.',
                 style: TextStyle(color: BMColors.dim, fontSize: 12),
@@ -421,12 +438,12 @@ class _HotkeyEditorState extends State<HotkeyEditor> {
           Padding(
             padding: const EdgeInsets.only(top: 14, bottom: 4),
             child: Text(title,
-                style: const TextStyle(fontFamily: BMFonts.mono, fontSize: 11, letterSpacing: 1.5, color: BMColors.mango)),
+                style: TextStyle(fontFamily: BMFonts.mono, fontSize: 11, letterSpacing: 1.5, color: BMColors.mango)),
           ),
           if (note.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
-              child: Text(note, style: const TextStyle(color: BMColors.dim, fontSize: 12)),
+              child: Text(note, style: TextStyle(color: BMColors.dim, fontSize: 12)),
             ),
           for (final a in actions)
             Padding(
@@ -437,7 +454,7 @@ class _HotkeyEditorState extends State<HotkeyEditor> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(hkLabels[a]!, style: const TextStyle(color: BMColors.text, fontSize: 14)),
+                        Text(hkLabels[a]!, style: TextStyle(color: BMColors.text, fontSize: 14)),
                         if ((byKey[Hotkeys.bindingFor(a)]?.length ?? 0) > 1)
                           Text(
                             'Same key as: ${byKey[Hotkeys.bindingFor(a)]!.where((o) => o != a).map((o) => hkLabels[o]).join(', ')}',

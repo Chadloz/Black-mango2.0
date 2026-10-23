@@ -460,7 +460,7 @@ class _VodSwitchBannerState extends State<VodSwitchBanner> {
             const SizedBox(width: 6),
             TextButton(
               onPressed: () => Services.playback.undoVodSwitch(),
-              child: const Text('Undo', style: TextStyle(color: BMColors.mango, fontWeight: FontWeight.w700)),
+              child: Text('Undo', style: TextStyle(color: BMColors.mango, fontWeight: FontWeight.w700)),
             ),
           ],
         ),

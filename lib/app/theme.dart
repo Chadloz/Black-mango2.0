@@ -1,20 +1,37 @@
 import 'package:flutter/material.dart';
+import 'skins.dart';
 
-/// Black Mango colors. Change them here and the whole app follows.
+/// Black Mango colors: always the active skin's (Settings > Appearance), so the whole app
+/// follows when you switch. Black Mango's own colors are the 'black_mango' skin in skins.dart.
 class BMColors {
-  static const background = Color(0xFF0B0B0B);
-  static const surface = Color(0xFF151515);
-  static const surfaceHigh = Color(0xFF1E1E1E);
-  static const border = Color(0xFF2A2A2A);
-  static const mango = Color(0xFFFF8C00);
-  static const text = Color(0xFFEDEDED);
-  static const dim = Color(0xFF8A8A8A);
+  static Color get background => Skins.skin.background;
+  static Color get surface => Skins.skin.surface;
+  static Color get surfaceHigh => Skins.skin.surfaceHigh;
+  static Color get border => Skins.skin.border;
+  static Color get mango => Skins.skin.accent; // the accent (mango orange in the normal skin)
+  static Color get text => Skins.skin.text;
+  static Color get dim => Skins.skin.dim;
 }
 
 /// Fonts bundled in assets/fonts (SIL Open Font License).
 class BMFonts {
   static const ui = 'Outfit';
   static const mono = 'JetBrainsMono';
+
+  /// The wordmark and screen titles: the skin's title font (Halloween: dripping Nosifer).
+  static String get title => Skins.skin.titleFont ?? ui;
+
+  /// A screen title in the skin's title font. Decorative fonts run wide and come in one
+  /// weight, so they're set a little smaller and regular.
+  static TextStyle titleStyle(double size, {Color? color}) {
+    final special = Skins.skin.titleFont != null;
+    return TextStyle(
+      fontFamily: title,
+      fontSize: special ? size * 0.82 : size,
+      fontWeight: special ? FontWeight.w400 : FontWeight.w700,
+      color: color ?? BMColors.text,
+    );
+  }
 }
 
 ThemeData buildTheme() {
@@ -23,7 +40,7 @@ ThemeData buildTheme() {
     useMaterial3: true,
     fontFamily: BMFonts.ui,
     scaffoldBackgroundColor: BMColors.background,
-    colorScheme: const ColorScheme.dark(
+    colorScheme: ColorScheme.dark(
       primary: BMColors.mango,
       secondary: BMColors.mango,
       surface: BMColors.surface,
@@ -31,10 +48,10 @@ ThemeData buildTheme() {
       onSurface: BMColors.text,
     ),
     dividerColor: BMColors.border,
-    dividerTheme: const DividerThemeData(color: BMColors.border),
-    navigationRailTheme: const NavigationRailThemeData(
+    dividerTheme: DividerThemeData(color: BMColors.border),
+    navigationRailTheme: NavigationRailThemeData(
       backgroundColor: BMColors.surface,
-      indicatorColor: Color(0x33FF8C00),
+      indicatorColor: BMColors.mango.withAlpha(0x33),
       selectedIconTheme: IconThemeData(color: BMColors.mango),
       unselectedIconTheme: IconThemeData(color: BMColors.dim),
       selectedLabelTextStyle: TextStyle(color: BMColors.mango, fontWeight: FontWeight.w600),

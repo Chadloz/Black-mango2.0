@@ -70,13 +70,13 @@ class StillWatchingOverlay extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.bedtime, size: 40, color: BMColors.mango),
+                Icon(Icons.bedtime, size: 40, color: BMColors.mango),
                 const SizedBox(height: 12),
                 Text(StillWatching.message,
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
                 const SizedBox(height: 8),
-                const Text('Playback paused.', style: TextStyle(color: BMColors.dim)),
+                Text('Playback paused.', style: TextStyle(color: BMColors.dim)),
                 const SizedBox(height: 16),
                 FilledButton.icon(
                   onPressed: StillWatching.dismiss,
