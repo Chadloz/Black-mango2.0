@@ -3,6 +3,45 @@
   <channel>
     <title>Black Mango</title>
     <item>
+      <title>Black Mango 2.0.0-beta.6 for Windows</title>
+      <pubDate>Fri, 23 Oct 2026 23:22:58 +0000</pubDate>
+      <sparkle:version>2.0.0+5</sparkle:version>
+      <sparkle:shortVersionString>2.0.0-beta.6</sparkle:shortVersionString>
+      <description><![CDATA[<h2>Black Mango 2.0, test build 6</h2>
+<h3>New: skins</h3>
+<ul>
+<li><b>Settings &gt; Appearance</b> has a new <b>Skin</b> picker. The whole app changes colors right away.</li>
+<li><b>The Halloween pack:</b> Pumpkin Patch, Witching Hour, Blood Moon and Graveyard Fog. Each comes with a jack-o&#x27;-lantern mango, two flickering pumpkins and some bats in the top bar, cobwebs in the corners, a little fog, dripping titles, and a ghost who says Boo! when you add an account.</li>
+<li>Black Mango&#x27;s own look is still the default skin, and you can switch back any time.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li>Live TV, Movies and Shows keep your place in the list when the player floats or the window changes size. Only your own scrolling moves it.</li>
+<li>New <b>Top</b> and <b>Bottom</b> buttons on those lists, plus shortcuts: <b>Home</b> (top), <b>End</b> (bottom), and <b>B</b> to jump back to where you were.</li>
+</ul>]]></description>
+      <enclosure url="https://github.com/Chadloz/Black-mango2.0/releases/download/v2.0.0-beta.6/Black-Mango-2.0.0-beta.6-Setup.exe" length="27902122" type="application/octet-stream" sparkle:os="windows" sparkle:version="2.0.0+5" sparkle:shortVersionString="2.0.0-beta.6" sparkle:installerArguments="/SILENT /SP- /SUPPRESSMSGBOXES /NORESTART" sparkle:dsaSignature="MD0CHQDhzdXMfyk2nRtaFGsqPxU7+WKdLU1DmuohUFDFAhwxfiMRMLkmVip+oinvcNWlTPgI6ypwdOgt3tve"/>
+    </item>
+    <item>
+      <title>Black Mango 2.0.0-beta.6</title>
+      <pubDate>Fri, 23 Oct 2026 23:22:58 +0000</pubDate>
+      <sparkle:version>5</sparkle:version>
+      <sparkle:shortVersionString>2.0.0-beta.6</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<h2>Black Mango 2.0, test build 6</h2>
+<h3>New: skins</h3>
+<ul>
+<li><b>Settings &gt; Appearance</b> has a new <b>Skin</b> picker. The whole app changes colors right away.</li>
+<li><b>The Halloween pack:</b> Pumpkin Patch, Witching Hour, Blood Moon and Graveyard Fog. Each comes with a jack-o&#x27;-lantern mango, two flickering pumpkins and some bats in the top bar, cobwebs in the corners, a little fog, dripping titles, and a ghost who says Boo! when you add an account.</li>
+<li>Black Mango&#x27;s own look is still the default skin, and you can switch back any time.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li>Live TV, Movies and Shows keep your place in the list when the player floats or the window changes size. Only your own scrolling moves it.</li>
+<li>New <b>Top</b> and <b>Bottom</b> buttons on those lists, plus shortcuts: <b>Home</b> (top), <b>End</b> (bottom), and <b>B</b> to jump back to where you were.</li>
+</ul>]]></description>
+      <enclosure url="https://github.com/Chadloz/Black-mango2.0/releases/download/v2.0.0-beta.6/Black-Mango-2.0.0-beta.6.zip" length="41457174" type="application/octet-stream" sparkle:os="macos" sparkle:edSignature="vBXzjgfdyMNmS+ohmYyfVGsE0fzid+/f2V0lZUOImTWOO2FFHiG5iJFgdj29gSqU+0z2M/u9iEIhi7hM5P21Ag=="/>
+    </item>
+    <item>
       <title>Black Mango 2.0.0-beta.5 for Windows</title>
       <pubDate>Fri, 23 Oct 2026 02:55:16 +0000</pubDate>
       <sparkle:version>2.0.0+4</sparkle:version>
