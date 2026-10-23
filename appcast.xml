@@ -3,6 +3,51 @@
   <channel>
     <title>Black Mango</title>
     <item>
+      <title>Black Mango 2.0.0-beta.5 for Windows</title>
+      <pubDate>Fri, 23 Oct 2026 02:55:16 +0000</pubDate>
+      <sparkle:version>2.0.0+4</sparkle:version>
+      <sparkle:shortVersionString>2.0.0-beta.5</sparkle:shortVersionString>
+      <description><![CDATA[<h2>Black Mango 2.0, test build 5</h2>
+<h3>New in this build</h3>
+<p>Steadier live channels when a provider keeps dropping the connection:</p>
+<ul>
+<li>No blocky picture after a reconnect. When the stream comes back from a different server, or with footage missing, Black Mango holds the last clean picture (the sound keeps going) until the next full frame.</li>
+<li>Black Mango tries to reconnect to the same stream server first, and stops trying once a provider shows it never allows that, so reconnects are quicker.</li>
+<li>Channels that keep dropping can build up to 30 seconds of cushion. It only grows when the channel actually stalls.</li>
+<li>If the provider offers HLS, a jumpy channel switches to it on the same account and remembers that. If HLS doesn&#x27;t show a picture within 12 seconds, Black Mango goes straight back.</li>
+<li>If a channel keeps jumping, a note tells you, and Black Mango switches to the same channel on another of your accounts when one has it.</li>
+<li><b>Settings &gt; Fixes for flaky channels</b> shows how many channels have extra cushion or HLS, and resets them all.</li>
+</ul>
+<h3>Also included (from test build 4)</h3>
+<ul>
+<li>Stalker accounts on Windows send your real time zone, so guide times line up.</li>
+</ul>]]></description>
+      <enclosure url="https://github.com/Chadloz/Black-mango2.0/releases/download/v2.0.0-beta.5/Black-Mango-2.0.0-beta.5-Setup.exe" length="27750931" type="application/octet-stream" sparkle:os="windows" sparkle:version="2.0.0+4" sparkle:shortVersionString="2.0.0-beta.5" sparkle:installerArguments="/SILENT /SP- /SUPPRESSMSGBOXES /NORESTART" sparkle:dsaSignature="MD4CHQCB77JL7Qmtdv+0oWqWbZBS2CbCjj5sM7IxXVOOAh0AontT7uHfwyYMhUFuGGeKF/B0UZNseD7jcSglFg=="/>
+    </item>
+    <item>
+      <title>Black Mango 2.0.0-beta.5</title>
+      <pubDate>Fri, 23 Oct 2026 02:55:16 +0000</pubDate>
+      <sparkle:version>4</sparkle:version>
+      <sparkle:shortVersionString>2.0.0-beta.5</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<h2>Black Mango 2.0, test build 5</h2>
+<h3>New in this build</h3>
+<p>Steadier live channels when a provider keeps dropping the connection:</p>
+<ul>
+<li>No blocky picture after a reconnect. When the stream comes back from a different server, or with footage missing, Black Mango holds the last clean picture (the sound keeps going) until the next full frame.</li>
+<li>Black Mango tries to reconnect to the same stream server first, and stops trying once a provider shows it never allows that, so reconnects are quicker.</li>
+<li>Channels that keep dropping can build up to 30 seconds of cushion. It only grows when the channel actually stalls.</li>
+<li>If the provider offers HLS, a jumpy channel switches to it on the same account and remembers that. If HLS doesn&#x27;t show a picture within 12 seconds, Black Mango goes straight back.</li>
+<li>If a channel keeps jumping, a note tells you, and Black Mango switches to the same channel on another of your accounts when one has it.</li>
+<li><b>Settings &gt; Fixes for flaky channels</b> shows how many channels have extra cushion or HLS, and resets them all.</li>
+</ul>
+<h3>Also included (from test build 4)</h3>
+<ul>
+<li>Stalker accounts on Windows send your real time zone, so guide times line up.</li>
+</ul>]]></description>
+      <enclosure url="https://github.com/Chadloz/Black-mango2.0/releases/download/v2.0.0-beta.5/Black-Mango-2.0.0-beta.5.zip" length="41242620" type="application/octet-stream" sparkle:os="macos" sparkle:edSignature="B8SqjicPOCMdJ6yIy7eo4gR9tgXaP0ocY4/Y3Cfctc2oZsyuXkGTXiRdqkDHqM7n8BvPnh+NSNReUqGL6Qa3Cw=="/>
+    </item>
+    <item>
       <title>Black Mango 2.0.0-beta.3 for Windows</title>
       <pubDate>Tue, 20 Oct 2026 16:26:02 +0000</pubDate>
       <sparkle:version>2.0.0+3</sparkle:version>
