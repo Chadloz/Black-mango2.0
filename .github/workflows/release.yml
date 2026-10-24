@@ -162,7 +162,7 @@ jobs:
           cat SHA256SUMS.txt
 
       - name: Proof of where the files were built (build attestations)
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: 'dist/Black-Mango-*'
 
