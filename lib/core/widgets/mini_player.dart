@@ -340,7 +340,7 @@ class _MiniLayerState extends State<_MiniLayer> {
   Widget _btn(IconData icon, String tip, VoidCallback onTap) => IconButton(
         tooltip: tip,
         onPressed: onTap,
-        icon: Icon(icon, color: Colors.white, size: 20),
+        icon: Icon(icon, color: BMColors.controls, size: 20),
       );
 
   void _seek(int secs) {

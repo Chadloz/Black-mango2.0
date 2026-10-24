@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "about": "Black Mango skin drops. Each drop opens a pack (assets/packs/<pack>.json) between start and end, your own local days. A drop with a code is a giveaway: only people who paste the code collect it. See docs/DROPS.md.",
+  "drops": [
+    {"id": "thanksgiving-2026", "name": "Thanksgiving 2026", "pack": "thanksgiving-2026", "start": "2026-11-01", "end": "2026-11-26"}
+  ]
+}

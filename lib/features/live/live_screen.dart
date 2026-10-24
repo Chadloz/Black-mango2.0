@@ -8,6 +8,10 @@ import '../../core/storage/database.dart';
 import '../../core/widgets/account_picker.dart';
 import '../../core/widgets/tag_chips.dart';
 import '../../core/widgets/keep_scroll.dart';
+import '../../core/widgets/side_scroll.dart';
+import '../../core/widgets/skin_pill.dart';
+import '../../app/skins.dart';
+import '../../app/skin_textures.dart';
 import '../../core/catalog/display_name.dart';
 import '../../core/widgets/filter_menu.dart';
 import '../../core/widgets/track_menu.dart';
@@ -341,7 +345,7 @@ class _LiveScreenState extends State<LiveScreen> {
   }
 
   Widget _toolbar({required bool compact}) {
-    final search = TextField(
+    final search = SkinTextures.box(TextureArea.raised, BMColors.surfaceHigh, radius: BorderRadius.circular(10), child: TextField(
       controller: _searchCtrl,
       onChanged: _onSearch,
       decoration: InputDecoration(
@@ -359,10 +363,10 @@ class _LiveScreenState extends State<LiveScreen> {
         prefixIcon: Icon(Icons.search, color: BMColors.dim),
         isDense: true,
         filled: true,
-        fillColor: BMColors.surfaceHigh,
+        fillColor: Colors.transparent, // the box around it has the color (and texture)
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
       ),
-    );
+    ));
     final filters = FilterMenu(
       countries: _countryOpts,
       languages: _langOpts,
@@ -456,10 +460,11 @@ class _LiveScreenState extends State<LiveScreen> {
 
   Widget _pills() {
     return SizedBox(
-      height: 44,
-      child: ListView(
+      height: 44 + SideScroll.barSpace,
+      child: SideScroll(builder: (c) => ListView(
+        controller: c,
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, SideScroll.barSpace),
         children: [
           _Pill(label: 'All', selected: _genre == null && !_favOnly, onTap: () {
             setState(() {
@@ -484,7 +489,7 @@ class _LiveScreenState extends State<LiveScreen> {
               _reload();
             }),
         ],
-      ),
+      )),
     );
   }
 
@@ -580,7 +585,7 @@ class _PlayerArea extends StatelessWidget {
           Container(
             width: double.infinity,
             height: 40,
-            color: BMColors.surface,
+            decoration: SkinTextures.panel(BMColors.surface),
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text.rich(
@@ -605,20 +610,7 @@ class _Pill extends StatelessWidget {
   const _Pill({required this.label, required this.selected, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8, top: 4, bottom: 4),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: selected,
-        showCheckmark: false,
-        onSelected: (_) => onTap(),
-        selectedColor: BMColors.mango.withAlpha(0x33),
-        labelStyle: TextStyle(color: selected ? BMColors.mango : BMColors.text),
-        side: BorderSide(color: selected ? BMColors.mango : BMColors.border),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => SkinPill(label: label, selected: selected, onTap: onTap);
 }
 
 class _ChannelRow extends StatelessWidget {
@@ -650,6 +642,7 @@ class _ChannelRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
           color: active ? BMColors.mango.withAlpha(0x22) : (selected ? const Color(0x18FFFFFF) : null),
+          image: active ? SkinTextures.image(Skins.skin, TextureArea.accent) : null,
           border: Border(bottom: BorderSide(color: BMColors.border, width: 0.5)),
         ),
         child: Row(

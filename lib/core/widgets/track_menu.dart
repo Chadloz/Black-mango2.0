@@ -138,6 +138,13 @@ class PlayerMoreMenu extends StatelessWidget {
     final cur = Services.playback.current.value;
     if (cur == null) return;
     final url = await Services.playback.urlFor(cur);
+    // Only real stream links go to VLC: a "link" starting with a dash would be read as a VLC
+    // option. (Security review, Oct 2026.)
+    const streamSchemes = {'http', 'https', 'rtmp', 'rtmps', 'rtsp', 'rtp', 'udp', 'mms'};
+    if (!streamSchemes.contains(Uri.tryParse(url)?.scheme.toLowerCase())) {
+      messenger.showSnackBar(const SnackBar(content: Text('That link can\'t be opened in VLC.')));
+      return;
+    }
     await Clipboard.setData(ClipboardData(text: url)); // backup in case the launch fails
     final pos = Services.playback.player.state.position.inSeconds;
     final live = cur.kind == 'live';

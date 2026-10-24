@@ -192,6 +192,9 @@ class PlaybackService {
   Future<void> _configureFor(Item item, String url) async {
     final np = player.platform;
     if (np is! NativePlayer) return;
+    // Never hand a link to yt-dlp (or youtube-dl), even if it's installed: IPTV doesn't need it,
+    // and it would let a provider's link start another program. (Security review, Oct 2026.)
+    await np.setProperty('ytdl', 'no');
     final path = (Uri.tryParse(url)?.path ?? '').toLowerCase();
     // Stalker live links (/play/live.php?...) don't look like .ts, but they are endless MPEG-TS.
     final isEndlessTs = path.endsWith('.ts') || RegExp(r'/\d+$').hasMatch(path) || (item.kind == 'live' && _stalkerKnown(item));

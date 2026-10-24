@@ -15,7 +15,7 @@ class TransportButtons extends StatelessWidget {
 
   Widget _btn(String tip, VoidCallback onTap, {IconData? icon, Widget? child}) => IconButton(
         tooltip: tip,
-        color: Colors.white,
+        color: BMColors.controls,
         iconSize: iconSize,
         visualDensity: VisualDensity.compact,
         onPressed: onTap,
@@ -81,12 +81,12 @@ class _Fifteen extends StatelessWidget {
           Transform(
             alignment: Alignment.center,
             transform: back ? Matrix4.identity() : Matrix4.diagonal3Values(-1, 1, 1),
-            child: Icon(Icons.replay, size: size, color: Colors.white),
+            child: Icon(Icons.replay, size: size, color: BMColors.controls),
           ),
           Padding(
             padding: EdgeInsets.only(top: size * 0.14),
             child: Text('15',
-                style: TextStyle(color: Colors.white, fontSize: size * 0.3, fontWeight: FontWeight.w700, height: 1)),
+                style: TextStyle(color: BMColors.controls, fontSize: size * 0.3, fontWeight: FontWeight.w700, height: 1)),
           ),
         ],
       ),

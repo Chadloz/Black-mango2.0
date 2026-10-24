@@ -1,0 +1,68 @@
+# Black Mango skin drops: when the drop list or a pack file changes on main, publish the list
+# (with each drop's pack file inside it) next to the update feed, where the app reads it:
+# https://raw.githubusercontent.com/Chadloz/Black-mango2.0/updates/drops.json
+name: Skin drops
+
+on:
+  push:
+    branches: [main]
+    paths: ['drops/drops.json', 'assets/packs/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: updates-branch
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the drops and add their packs
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          d = json.load(open('drops/drops.json'))
+          assert isinstance(d.get('drops'), list), 'drops must be a list'
+          ids = set()
+          for x in d['drops']:
+              for k in ('id', 'start', 'end'):
+                  assert k in x, f'a drop is missing "{k}"'
+              assert x['id'] not in ids, f'two drops are called {x["id"]}'
+              ids.add(x['id'])
+              for k in ('start', 'end'):
+                  assert re.fullmatch(r'\d{4}-\d{2}-\d{2}', x[k]), f'{x["id"]}: {k} must look like 2026-11-01'
+              assert x['start'] <= x['end'], f'{x["id"]}: ends before it starts'
+              if 'code' in x:
+                  assert re.fullmatch(r'[0-9a-f]{64}', x['code']), f'{x["id"]}: make the code line with tool/giveaway_code.py'
+              pack = x.get('pack', x['id'])
+              path = f'assets/packs/{pack}.json'
+              assert os.path.exists(path), f'{x["id"]}: there is no {path}'
+              p = json.load(open(path))
+              assert p.get('format') == 'black-mango-pack' and p.get('id') == pack, f'{path} is not a pack file for {pack}'
+              x['pack'] = pack
+              x['packData'] = p
+          os.makedirs('out', exist_ok=True)
+          json.dump(d, open('out/drops.json', 'w'), indent=1)
+          print('drops.json looks good:', sorted(ids))
+          PY
+
+      - name: Publish next to the update feed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin updates
+          git worktree add feed origin/updates
+          git -C feed checkout -B updates
+          cp out/drops.json feed/drops.json
+          git -C feed add drops.json
+          if git -C feed diff --cached --quiet; then
+            echo "No change."
+          else
+            git -C feed commit -m "Skin drops: update"
+            git -C feed push origin updates
+          fi

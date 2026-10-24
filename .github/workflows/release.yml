@@ -65,6 +65,13 @@ jobs:
   macos:
     needs: windows
     runs-on: macos-14
+    # The signing keys are used in this job. With a protection rule on the "release" environment
+    # (repo Settings > Environments), it waits for Chad to approve before it can use them.
+    environment: release
+    permissions:
+      contents: write # publish the release and the update feed
+      id-token: write # build attestations (proof the files were built here, from this commit)
+      attestations: write
     steps:
       - uses: actions/checkout@v5
 
@@ -148,8 +155,27 @@ jobs:
           echo "sig=$SIG" >> "$GITHUB_OUTPUT"
           echo "len=$(stat -f%z "$EXE")" >> "$GITHUB_OUTPUT"
 
+      - name: Checksums
+        run: |
+          cd dist
+          shasum -a 256 Black-Mango-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Proof of where the files were built (build attestations)
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: 'dist/Black-Mango-*'
+
       - name: Release notes
-        run: python3 tool/release_notes.py "${{ steps.v.outputs.tag }}" > dist/notes.md
+        run: |
+          python3 tool/release_notes.py "${{ steps.v.outputs.tag }}" > dist/notes.md
+          {
+            echo
+            echo "## Checking your download"
+            echo
+            echo "Each file's SHA-256 is in SHA256SUMS.txt. GitHub can also confirm a file was built by this"
+            echo "repository's release workflow from the public code: \`gh attestation verify <file> --repo ${{ github.repository }}\`"
+          } >> dist/notes.md
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2
@@ -162,6 +188,7 @@ jobs:
             dist/*.dmg
             dist/*.zip
             dist/*.exe
+            dist/SHA256SUMS.txt
 
       - name: Add it to the update feed
         run: |

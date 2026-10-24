@@ -11,6 +11,7 @@ import '../../core/playback/still_watching.dart';
 import '../../core/playback/live_buffer.dart';
 import '../../core/updates.dart';
 import '../../app/skins.dart';
+import 'skins_page.dart';
 
 const _langOptions = [
   ('', 'Automatic'),
@@ -47,6 +48,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late final _msgCtrl = TextEditingController(text: Prefs.getStr('still.msg') ?? '');
+  bool _skins = false; // Settings > Skins is open
 
   @override
   void dispose() {
@@ -112,6 +114,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (ok != true) return;
     try {
       final accts = await Backup.apply(data);
+      Skins.load(); // the backup may bring skins of yours
       if (mounted) setState(() {});
       _snack('Imported. Reloading ${accts.length} account(s) in the background...');
       Backup.reloadAll(accts);
@@ -126,6 +129,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_skins) return SkinsPage(onBack: () => setState(() => _skins = false));
     final launch = Prefs.getStr('launch.mode') ?? 'resume';
     final subsOn = Prefs.getBool('subs.on');
     final subLang = _langValue(Prefs.getStr('subs.lang') ?? 'en');
@@ -139,15 +143,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         _section('APPEARANCE'),
         _row(
-          'Skin',
-          const SizedBox.shrink(),
-          sub: 'Changes the colors of the whole app. The Halloween skins also bring a jack-o\'-lantern mango, '
-              'lit pumpkins, bats, cobwebs, a little fog, and a ghost who says Boo! when you add an account.',
-        ),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [for (final s in Skins.all) _SkinCard(skin: s, onTap: () => Skins.pick(s))],
+          'Skins',
+          OutlinedButton.icon(
+            onPressed: () => setState(() => _skins = true),
+            icon: const Icon(Icons.palette_outlined, size: 18),
+            label: const Text('Open skins'),
+          ),
+          sub: 'Using ${Skins.skin.name}. Pick another skin, or make your own in any colors.',
         ),
 
         _section('PLAYBACK'),
@@ -434,7 +436,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _row(
           'App updates',
           OutlinedButton(onPressed: Updates.checkNow, child: const Text('Check for updates')),
-          sub: 'Black Mango checks quietly when it opens and once a day. When there\'s a new version, you\'ll see what\'s new and can install it or wait.',
+          sub: 'Every update is signed, and Black Mango checks the signature before offering it. When there\'s a new version, you\'ll see what\'s new and can install it or wait.',
+        ),
+        _row(
+          'Check for updates automatically',
+          Switch(
+            value: Updates.automatic,
+            onChanged: (v) {
+              Prefs.setBool('updates.manual', !v);
+              setState(() {});
+              if (v) Updates.start();
+            },
+          ),
+          sub: 'Quietly when Black Mango opens and once a day. Turned off, it only checks when you press Check for updates.',
         ),
       ],
     );
@@ -489,60 +503,4 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
       );
-}
-
-/// One skin in Settings > Appearance: drawn in its own colors, so the card is the preview.
-class _SkinCard extends StatelessWidget {
-  final Skin skin;
-  final VoidCallback onTap;
-  const _SkinCard({required this.skin, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final on = Skins.skin.id == skin.id;
-    Widget dot(Color c) => Container(
-          width: 14,
-          height: 14,
-          margin: const EdgeInsets.only(right: 4),
-          decoration: BoxDecoration(color: c, shape: BoxShape.circle, border: Border.all(color: skin.border)),
-        );
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: 190,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: skin.background,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: on ? skin.accent : skin.border, width: on ? 2 : 1),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Image.asset(skin.logo, height: 28),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(skin.group.toUpperCase(),
-                      style: TextStyle(fontFamily: BMFonts.mono, fontSize: 10, letterSpacing: 1.5, color: skin.dim)),
-                ),
-                if (on) Icon(Icons.check_circle, color: skin.accent, size: 18),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(skin.name,
-                style: TextStyle(
-                    fontFamily: skin.titleFont ?? BMFonts.ui,
-                    fontSize: skin.titleFont != null ? 13 : 15,
-                    fontWeight: skin.titleFont != null ? FontWeight.w400 : FontWeight.w700,
-                    color: skin.text)),
-            const SizedBox(height: 8),
-            Row(children: [dot(skin.surface), dot(skin.surfaceHigh), dot(skin.accent), dot(skin.text), dot(skin.dim)]),
-          ],
-        ),
-      ),
-    );
-  }
 }

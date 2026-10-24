@@ -4,6 +4,10 @@ import '../../app/theme.dart';
 import '../../app/nav.dart';
 import '../../core/services.dart';
 import '../../core/storage/database.dart';
+import '../../core/widgets/side_scroll.dart';
+import '../../core/widgets/skin_pill.dart';
+import '../../app/skins.dart';
+import '../../app/skin_textures.dart';
 
 class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
@@ -89,26 +93,16 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     return Column(
       children: [
         SizedBox(
-          height: 56,
-          child: ListView(
+          height: 56 + SideScroll.barSpace,
+          child: SideScroll(builder: (c) => ListView(
+            controller: c,
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4 + SideScroll.barSpace),
             children: [
               for (final k in labels.keys)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text('${labels[k]} (${counts[k]})'),
-                    selected: _filter == k,
-                    showCheckmark: false,
-                    onSelected: (_) => setState(() => _filter = k),
-                    selectedColor: BMColors.mango.withAlpha(0x33),
-                    labelStyle: TextStyle(color: _filter == k ? BMColors.mango : BMColors.text),
-                    side: BorderSide(color: _filter == k ? BMColors.mango : BMColors.border),
-                  ),
-                ),
+                SkinPill(label: '${labels[k]} (${counts[k]})', selected: _filter == k, onTap: () => setState(() => _filter = k)),
             ],
-          ),
+          )),
         ),
         Expanded(
           child: GridView.builder(
@@ -176,7 +170,7 @@ class _FavTile extends StatelessWidget {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: Container(
-                    color: BMColors.surfaceHigh,
+                    decoration: SkinTextures.decorate(TextureArea.cards, BMColors.surfaceHigh),
                     padding: isLive ? const EdgeInsets.all(18) : EdgeInsets.zero,
                     child: art,
                   ),

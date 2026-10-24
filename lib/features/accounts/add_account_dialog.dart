@@ -1,6 +1,7 @@
 import 'dart:async';
 import '../../app/skins.dart';
 import '../../core/widgets/halloween.dart';
+import '../../core/widgets/thanksgiving.dart';
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/services.dart';
@@ -55,6 +56,12 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   }
 
   void _detect() {
+    // A skin code (from Settings > Skins) pasted here by mistake, or on purpose: offer to add it.
+    final skin = SkinCode.find(_paste.text);
+    if (skin != null) {
+      _offerSkin(skin);
+      return;
+    }
     final p = parseAccountText(_paste.text);
     setState(() {
       _error = null;
@@ -76,6 +83,41 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
         ...p.notes,
       ];
     });
+  }
+
+  bool _offering = false;
+
+  /// The paste was a skin code, not an account: add it to My skins and switch to it?
+  Future<void> _offerSkin(Skin skin) async {
+    if (_offering) return;
+    _offering = true;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('That\'s a skin code'),
+        content: Text('It\'s "${skin.name}", a Black Mango skin, not an account. Add it to My skins and switch to it?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add skin')),
+        ],
+      ),
+    );
+    _offering = false;
+    if (!mounted) return;
+    if (ok != true) {
+      setState(() {
+        _paste.clear();
+        _notes = [];
+      });
+      return;
+    }
+    final named = skin.copyWith(name: Skins.uniqueName(skin.name));
+    await Skins.save(named);
+    await Skins.pick(named);
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.pop(context);
+    messenger.showSnackBar(SnackBar(content: Text('Added "${named.name}" to My skins. Find it in Settings > Skins.')));
   }
 
   /// The paste also had an Xtream / M3U login for the same provider: use that instead of the MAC.
@@ -190,6 +232,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
       Navigator.pop(context);
       messenger.showSnackBar(SnackBar(content: Text('Saved "$name". Loading...')));
       if (Skins.skin.halloween) Ghost.boo(overlay, name); // Halloween skins: a ghost says Boo!
+      if (Skins.skin.holiday == 'thanksgiving') Turkey.gobble(overlay, name); // Thanksgiving: Gobble!
       final account = await Services.accounts.get(id);
       if (account != null) {
         Services.catalog.load(account).then(
@@ -227,6 +270,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
     Navigator.pop(context);
     messenger.showSnackBar(SnackBar(content: Text('Saved ${ids.length} accounts. Loading them one at a time...')));
     if (Skins.skin.halloween) Ghost.boo(overlay, ids.length == 1 ? ids.first.$2 : '${ids.length} accounts');
+    if (Skins.skin.holiday == 'thanksgiving') Turkey.gobble(overlay, ids.length == 1 ? ids.first.$2 : '${ids.length} accounts');
     for (final (id, name) in ids) {
       final account = await Services.accounts.get(id);
       if (account == null) continue;

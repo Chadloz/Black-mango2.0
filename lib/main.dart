@@ -13,13 +13,17 @@ import 'package:window_manager/window_manager.dart';
 import 'core/playback/still_watching.dart';
 import 'core/updates.dart';
 import 'app/skins.dart';
+import 'app/skin_textures.dart';
+import 'app/skin_drops.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   AppLog.start();
   MediaKit.ensureInitialized();
   await Prefs.init();
-  Skins.load(); // the skin you picked last time (Settings > Appearance)
+  await Skins.loadBundledPacks(); // holiday pack files in assets/packs
+  Skins.load(); // the skin you picked last time (Settings > Skins)
+  await SkinTextures.init(); // where your own skin pictures live
   await windowManager.ensureInitialized();
   Services.init();
   Session.start();
@@ -30,4 +34,5 @@ Future<void> main() async {
   PopOut.startAutoFloat();
   runApp(const BlackMangoApp());
   Updates.start(); // release builds: a quiet check now and once a day
+  SkinDrops.start(); // holiday skin drops: a check shortly after opening, then every 6 hours
 }

@@ -1,0 +1,54 @@
+{
+  "format": "black-mango-pack",
+  "version": 1,
+  "id": "thanksgiving-2026",
+  "name": "Thanksgiving 2026",
+  "about": "Black Mango's Thanksgiving 2026 holiday pack. Decorations, logo and title font are named sets built into the app; the colors are all here.",
+  "decorations": "thanksgiving",
+  "logo": "thanksgiving",
+  "font": "harvest",
+  "skins": [
+    {
+      "id": "tg26_harvest",
+      "name": "Harvest",
+      "colors": {
+        "background": "#1A110B",
+        "surface": "#24180F",
+        "accent": "#E8731C",
+        "surfaceHigh": "#2E1F14",
+        "border": "#3D2A1B",
+        "text": "#F4E9DC",
+        "dim": "#A8907A",
+        "controls": "#FFFFFF"
+      }
+    },
+    {
+      "id": "tg26_autumn",
+      "name": "Autumn Leaves",
+      "colors": {
+        "background": "#12150D",
+        "surface": "#1A1E13",
+        "accent": "#E2552A",
+        "surfaceHigh": "#23281A",
+        "border": "#313724",
+        "text": "#F1EBDD",
+        "dim": "#A2A48A",
+        "controls": "#FFFFFF"
+      }
+    },
+    {
+      "id": "tg26_cranberry",
+      "name": "Cranberry & Gold",
+      "colors": {
+        "background": "#170C12",
+        "surface": "#21121A",
+        "accent": "#D9A938",
+        "surfaceHigh": "#2B1823",
+        "border": "#3B2331",
+        "text": "#F6E9EE",
+        "dim": "#AE93A0",
+        "controls": "#FFFFFF"
+      }
+    }
+  ]
+}

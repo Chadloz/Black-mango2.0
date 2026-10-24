@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'skins.dart';
+import 'skin_textures.dart';
 
-/// Black Mango colors: always the active skin's (Settings > Appearance), so the whole app
+/// Black Mango colors: always the active skin's (Settings > Skins), so the whole app
 /// follows when you switch. Black Mango's own colors are the 'black_mango' skin in skins.dart.
 class BMColors {
   static Color get background => Skins.skin.background;
@@ -11,6 +12,10 @@ class BMColors {
   static Color get mango => Skins.skin.accent; // the accent (mango orange in the normal skin)
   static Color get text => Skins.skin.text;
   static Color get dim => Skins.skin.dim;
+  static Color get controls => Skins.skin.controls; // player buttons over the video
+
+  /// Text and icons on an accent-colored button: black on bright accents, white on dark ones.
+  static Color get onAccent => Skins.skin.accent.computeLuminance() > 0.18 ? Colors.black : Colors.white;
 }
 
 /// Fonts bundled in assets/fonts (SIL Open Font License).
@@ -44,8 +49,19 @@ ThemeData buildTheme() {
       primary: BMColors.mango,
       secondary: BMColors.mango,
       surface: BMColors.surface,
-      onPrimary: Colors.black,
+      onPrimary: BMColors.onAccent,
       onSurface: BMColors.text,
+    ),
+    // Filled buttons carry the accent texture, clipped to their pill shape.
+    filledButtonTheme: FilledButtonThemeData(
+      style: ButtonStyle(
+        backgroundBuilder: SkinTextures.has(TextureArea.accent)
+            ? (context, states, child) => DecoratedBox(
+                  decoration: ShapeDecoration(shape: const StadiumBorder(), image: SkinTextures.image(Skins.skin, TextureArea.accent)),
+                  child: child,
+                )
+            : null,
+      ),
     ),
     dividerColor: BMColors.border,
     dividerTheme: DividerThemeData(color: BMColors.border),

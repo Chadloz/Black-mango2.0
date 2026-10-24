@@ -1,0 +1,16 @@
+# Dependabot: opens a pull request when a package Black Mango uses (including the video engine,
+# media_kit and its libmpv) or a GitHub Action it builds with has a newer version, so security
+# fixes don't sit unnoticed. Turn on "Dependabot alerts" and "Dependabot security updates" in
+# repo Settings > Code security as well.
+version: 2
+updates:
+  - package-ecosystem: pub
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5

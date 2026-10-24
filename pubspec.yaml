@@ -74,11 +74,16 @@ flutter:
 
   assets:
     - assets/brand/
+    - assets/textures/
+    - assets/packs/
 
   fonts:
     - family: Nosifer
       fonts:
         - asset: assets/fonts/Nosifer.ttf
+    - family: BerkshireSwash
+      fonts:
+        - asset: assets/fonts/BerkshireSwash.ttf
     - family: Outfit
       fonts:
         - asset: assets/fonts/Outfit.ttf

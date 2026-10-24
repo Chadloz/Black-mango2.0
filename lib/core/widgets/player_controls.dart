@@ -176,13 +176,13 @@ class _BMControlsState extends State<BMControls> {
           if (!fs && !narrow)
             IconButton(
               tooltip: 'Float over other apps (P)',
-              color: Colors.white,
+              color: BMColors.controls,
               onPressed: () => PopOut.enter(),
               icon: const Icon(Icons.picture_in_picture_alt),
             ),
           IconButton(
             tooltip: fs ? 'Exit fullscreen (F)' : 'Fullscreen (F)',
-            color: Colors.white,
+            color: BMColors.controls,
             onPressed: () => widget.state.toggleFullscreen(),
             icon: Icon(fs ? Icons.fullscreen_exit : Icons.fullscreen),
           ),

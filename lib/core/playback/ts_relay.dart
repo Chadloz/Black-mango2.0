@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../prefs.dart';
@@ -36,7 +37,10 @@ class TsRelay {
 
   static HttpServer? _server;
   static final _urls = <String, _Target>{};
-  static int _next = 0;
+  static final _rng = Random.secure();
+
+  /// A random, unguessable link name (128 bits), so a web page can't guess its way to a stream.
+  static String _token() => [for (var i = 0; i < 16; i++) _rng.nextInt(256).toRadixString(16).padLeft(2, '0')].join();
   static final _pending = <Object, void Function()>{}; // requests still waiting on the provider's answer
   static final _owners = <String, (Object, void Function())>{}; // Stalker account -> its one request
 
@@ -74,7 +78,7 @@ class TsRelay {
   static String wrap(String url, {bool live = false, Future<String> Function()? refresh, String? group}) {
     final s = _server;
     if (s == null || Prefs.getBool('relay.off') || !(live || _isLiveTs(url))) return url;
-    final id = '${_next++}';
+    final id = _token();
     _urls[id] = _Target(url, refresh, group);
     if (_urls.length > 40) _urls.remove(_urls.keys.first);
     return 'http://127.0.0.1:${s.port}/r/$id.ts';
@@ -82,6 +86,16 @@ class TsRelay {
 
   static Future<void> _handle(HttpRequest req) async {
     final res = req.response;
+    // Only the video engine on this computer: the request must be addressed to 127.0.0.1 (a web
+    // page using a look-alike name can't), and browsers mark their requests (Origin, Sec-Fetch-*),
+    // the video engine never does.
+    final fromBrowser = req.headers.value('origin') != null || req.headers.value('sec-fetch-site') != null;
+    if (req.headers.host != '127.0.0.1' || fromBrowser) {
+      debugPrint('[relay] refused a request from outside the app');
+      res.statusCode = HttpStatus.forbidden;
+      await res.close();
+      return;
+    }
     final seg = req.uri.pathSegments;
     final id = seg.length == 2 && seg[0] == 'r' ? seg[1].replaceAll('.ts', '') : '';
     final t = _urls[id];

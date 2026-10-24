@@ -16,6 +16,10 @@ import '../catalog/stalker_groups.dart';
 import '../catalog/display_name.dart';
 import 'tag_chips.dart';
 import 'keep_scroll.dart';
+import 'side_scroll.dart';
+import 'skin_pill.dart';
+import '../../app/skins.dart';
+import '../../app/skin_textures.dart';
 
 String _fmt(int n) => n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
 
@@ -416,7 +420,7 @@ class _PosterBrowserState extends State<PosterBrowser> {
   }
 
   Widget _browser({required bool compact, required Item? cur}) {
-    final search = TextField(
+    final search = SkinTextures.box(TextureArea.raised, BMColors.surfaceHigh, radius: BorderRadius.circular(10), child: TextField(
       controller: _searchCtrl,
       onChanged: _onSearch,
       onSubmitted: _portalSearch,
@@ -435,10 +439,10 @@ class _PosterBrowserState extends State<PosterBrowser> {
         prefixIcon: Icon(Icons.search, color: BMColors.dim),
         isDense: true,
         filled: true,
-        fillColor: BMColors.surfaceHigh,
+        fillColor: Colors.transparent, // the box around it has the color (and texture)
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
       ),
-    );
+    ));
     final filters = FilterMenu(
       countries: _countryOpts,
       languages: _langOpts,
@@ -514,10 +518,11 @@ class _PosterBrowserState extends State<PosterBrowser> {
       children: [
         toolbar,
         SizedBox(
-          height: 44,
-          child: ListView(
+          height: 44 + SideScroll.barSpace,
+          child: SideScroll(builder: (c) => ListView(
+            controller: c,
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, SideScroll.barSpace),
             children: [
               _Pill(label: 'All', selected: _genre == null, onTap: () {
                 setState(() => _genre = null);
@@ -529,7 +534,7 @@ class _PosterBrowserState extends State<PosterBrowser> {
                   _reload();
                 }),
             ],
-          ),
+          )),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -682,20 +687,7 @@ class _Pill extends StatelessWidget {
   const _Pill({required this.label, required this.selected, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8, top: 4, bottom: 4),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: selected,
-        showCheckmark: false,
-        onSelected: (_) => onTap(),
-        selectedColor: BMColors.mango.withAlpha(0x33),
-        labelStyle: TextStyle(color: selected ? BMColors.mango : BMColors.text),
-        side: BorderSide(color: selected ? BMColors.mango : BMColors.border),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => SkinPill(label: label, selected: selected, onTap: onTap);
 }
 
 class _PosterTile extends StatelessWidget {
@@ -734,7 +726,7 @@ class _PosterTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
                   width: double.infinity,
-                  color: BMColors.surfaceHigh,
+                  decoration: SkinTextures.decorate(TextureArea.cards, BMColors.surfaceHigh),
                   child: item.logo.startsWith('http')
                       ? Image.network(item.logo, fit: BoxFit.cover, cacheWidth: 340, errorBuilder: (_, _, _) => fallback)
                       : fallback,

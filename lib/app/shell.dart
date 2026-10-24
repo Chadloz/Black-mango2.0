@@ -4,6 +4,11 @@ import 'nav.dart';
 import '../core/widgets/wordmark.dart';
 import '../core/widgets/halloween.dart';
 import 'skins.dart';
+import 'skin_textures.dart';
+import 'skin_drops.dart';
+import '../core/widgets/thanksgiving.dart';
+import '../core/widgets/drop_reveal.dart';
+import '../core/widgets/mini_player.dart' show PopOut;
 import '../features/home/home_screen.dart';
 import '../features/live/live_screen.dart';
 import '../features/movies/movies_screen.dart';
@@ -39,12 +44,26 @@ class _ShellState extends State<Shell> {
   void initState() {
     super.initState();
     AppNav.index.addListener(_onNav);
+    SkinDrops.pending.addListener(_onDrop);
+    PopOut.active.addListener(_onDrop);
   }
 
   @override
   void dispose() {
     AppNav.index.removeListener(_onNav);
+    SkinDrops.pending.removeListener(_onDrop);
+    PopOut.active.removeListener(_onDrop);
     super.dispose();
+  }
+
+  /// A holiday drop was collected: show its reveal, once the window isn't a floating player.
+  void _onDrop() {
+    final d = SkinDrops.pending.value;
+    if (d == null || PopOut.active.value) return;
+    SkinDrops.pending.value = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) DropReveal.show(context, d);
+    });
   }
 
   void _onNav() => setState(() => _index = AppNav.index.value);
@@ -82,6 +101,17 @@ class _ShellState extends State<Shell> {
       // Halloween skins lay cobweb corners and a faint fog over the app (never takes clicks).
       body: Stack(
         children: [
+          // The skin's texture (or your own picture) over the background color. Always in the
+          // tree, empty when there's none: adding it only for some skins would shift the layers
+          // below and rebuild the whole app (that sent the skin editor back to Settings).
+          Positioned.fill(child: IgnorePointer(child: DecoratedBox(decoration: SkinTextures.background() ?? const BoxDecoration()))),
+          // Holiday drops: things drifting behind the content (Thanksgiving: leaves). Always in
+          // the tree for the same reason as the texture layer.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Skins.skin.holiday == 'thanksgiving' ? const FallingLeaves() : const SizedBox.shrink(),
+            ),
+          ),
           Positioned.fill(child: Column(
         children: [
           _TopBar(section: current, onMenu: () => setState(() => _expanded = !_expanded)),
@@ -118,7 +148,7 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 72, // logo above the wordmark
-      color: BMColors.surface,
+      decoration: SkinTextures.panel(BMColors.surface),
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
@@ -130,6 +160,7 @@ class _TopBar extends StatelessWidget {
           const SizedBox(width: 8),
           const BrandStack(),
           if (Skins.skin.halloween) ...[const SizedBox(width: 28), const Bats()],
+          if (Skins.skin.holiday == 'thanksgiving') ...[const SizedBox(width: 24), const HarvestBar()],
           const Spacer(),
           Text(
             section.toUpperCase(),
@@ -173,7 +204,7 @@ class _Sidebar extends StatelessWidget {
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
       width: expanded ? 232 : 72,
-      color: BMColors.surface,
+      decoration: SkinTextures.panel(BMColors.surface),
       child: ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: children),
     );
   }
@@ -192,6 +223,7 @@ class _SidebarItem extends StatelessWidget {
       height: 48,
       decoration: BoxDecoration(
         color: selected ? BMColors.mango.withAlpha(0x22) : Colors.transparent,
+        image: selected ? SkinTextures.image(Skins.skin, TextureArea.accent) : null,
         border: Border(left: BorderSide(color: selected ? BMColors.mango : Colors.transparent, width: 3)),
       ),
       padding: EdgeInsets.symmetric(horizontal: expanded ? 16 : 0),

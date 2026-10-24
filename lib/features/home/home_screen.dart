@@ -5,6 +5,9 @@ import '../../app/nav.dart';
 import '../../core/services.dart';
 import '../../core/storage/database.dart';
 import '../../core/widgets/wordmark.dart';
+import '../../core/widgets/side_scroll.dart';
+import '../../app/skins.dart';
+import '../../app/skin_textures.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -197,13 +200,19 @@ class _Row extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
+          // The wheel scrolls the page here; over the scrollbar it slides the row.
           SizedBox(
-            height: height,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: children.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 14),
-              itemBuilder: (context, i) => children[i],
+            height: height + SideScroll.barSpace,
+            child: SideScroll(
+              wheelAnywhere: false,
+              builder: (c) => ListView.separated(
+                controller: c,
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.only(bottom: SideScroll.barSpace),
+                itemCount: children.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 14),
+                itemBuilder: (context, i) => children[i],
+              ),
             ),
           ),
         ],
@@ -246,7 +255,7 @@ class _Card extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     Container(
-                      color: BMColors.surfaceHigh,
+                      decoration: SkinTextures.decorate(TextureArea.cards, BMColors.surfaceHigh),
                       padding: poster ? EdgeInsets.zero : const EdgeInsets.all(18),
                       child: art.startsWith('http')
                           ? Image.network(art,

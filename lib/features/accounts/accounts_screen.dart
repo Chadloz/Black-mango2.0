@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
+import '../../app/skins.dart';
+import '../../app/skin_textures.dart';
 import '../../core/services.dart';
 import '../../core/storage/database.dart';
 import 'add_account_dialog.dart';
@@ -145,9 +147,10 @@ class _AccountCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: BMColors.surface,
-        borderRadius: BorderRadius.circular(12),
+      decoration: SkinTextures.decorate(
+        TextureArea.cards,
+        BMColors.surface,
+        radius: BorderRadius.circular(12),
         border: Border.all(color: BMColors.border),
       ),
       child: Column(

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:auto_updater/auto_updater.dart';
 import 'package:flutter/foundation.dart';
+import 'prefs.dart';
 
 /// Automatic updates through Sparkle on the Mac and WinSparkle on Windows (the same idea, the
 /// same feed: each item says which system it's for). Release builds check quietly at launch and
@@ -15,6 +16,10 @@ class Updates {
   static const version = String.fromEnvironment('BM_VERSION');
 
   static bool _ready = false;
+  static Timer? _timer;
+
+  /// Settings > App updates > Check automatically (on unless you turn it off).
+  static bool get automatic => !Prefs.getBool('updates.manual');
 
   static Future<void> _setUp() async {
     if (_ready) return;
@@ -26,11 +31,12 @@ class Updates {
   }
 
   static Future<void> start() async {
-    if (!(Platform.isMacOS || Platform.isWindows) || !kReleaseMode) return;
+    if (!(Platform.isMacOS || Platform.isWindows) || !kReleaseMode || !automatic) return;
     try {
       await _setUp();
       await autoUpdater.checkForUpdates(inBackground: true);
-      Timer.periodic(const Duration(hours: 24), (_) {
+      _timer ??= Timer.periodic(const Duration(hours: 24), (_) {
+        if (!automatic) return;
         autoUpdater.checkForUpdates(inBackground: true).catchError((Object e) => debugPrint('[updates] $e'));
       });
     } catch (e) {
