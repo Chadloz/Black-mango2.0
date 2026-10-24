@@ -307,11 +307,18 @@ class Skins {
   static const textures = ['grain', 'carbon', 'metal', 'paper']; // assets/textures/<name>.png
   static const thanksgivingLogo = 'assets/brand/logo_thanksgiving.png'; // the mango turkey
   static const harvestFont = 'BerkshireSwash'; // Thanksgiving titles
+  static const christmasLogo = 'assets/brand/logo_christmas.png'; // Santa hat and a candy cane
+  static const christmasFont = 'MountainsOfChristmas'; // Christmas titles
 
   /// Named sets a pack file can use (their art and code are built into the app).
-  static const packLogos = {'normal': normalLogo, 'halloween': halloweenLogo, 'thanksgiving': thanksgivingLogo};
-  static const packFonts = {'dripping': drippingFont, 'harvest': harvestFont};
-  static const holidayDecorations = {'thanksgiving'}; // beyond 'halloween', which has its own switch
+  static const packLogos = {
+    'normal': normalLogo,
+    'halloween': halloweenLogo,
+    'thanksgiving': thanksgivingLogo,
+    'christmas': christmasLogo,
+  };
+  static const packFonts = {'dripping': drippingFont, 'harvest': harvestFont, 'christmas': christmasFont};
+  static const holidayDecorations = {'thanksgiving', 'christmas'}; // beyond 'halloween', which has its own switch
 
   /// Holiday packs this app knows: the ones bundled in assets/packs, plus any the drop feed
   /// carries. Keyed by pack id.

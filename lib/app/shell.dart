@@ -7,6 +7,7 @@ import 'skins.dart';
 import 'skin_textures.dart';
 import 'skin_drops.dart';
 import '../core/widgets/thanksgiving.dart';
+import '../core/widgets/christmas.dart';
 import '../core/widgets/drop_reveal.dart';
 import '../core/widgets/mini_player.dart' show PopOut;
 import '../features/home/home_screen.dart';
@@ -109,7 +110,11 @@ class _ShellState extends State<Shell> {
           // the tree for the same reason as the texture layer.
           Positioned.fill(
             child: IgnorePointer(
-              child: Skins.skin.holiday == 'thanksgiving' ? const FallingLeaves() : const SizedBox.shrink(),
+              child: switch (Skins.skin.holiday) {
+                'thanksgiving' => const FallingLeaves(),
+                'christmas' => const Snowfall(),
+                _ => const SizedBox.shrink(),
+              },
             ),
           ),
           Positioned.fill(child: Column(
@@ -133,6 +138,7 @@ class _ShellState extends State<Shell> {
         ],
       )),
           if (Skins.skin.halloween) const Positioned.fill(child: HalloweenDecor()),
+          if (Skins.skin.holiday == 'christmas') const Positioned.fill(child: IgnorePointer(child: FrostCorners())),
         ],
       ),
     );
@@ -146,11 +152,29 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final christmas = Skins.skin.holiday == 'christmas';
     return Container(
       height: 72, // logo above the wordmark
       decoration: SkinTextures.panel(BMColors.surface),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: _row(),
+            ),
+          ),
+          // Christmas: snow piled along the top, and lights strung along the bottom, after the logo
+          // and the winter scene.
+          if (christmas) const Positioned(top: 0, left: 0, right: 0, height: 12, child: IgnorePointer(child: SnowCap())),
+          if (christmas) const Positioned(bottom: 0, left: 410, right: 0, height: 16, child: IgnorePointer(child: StringLights())),
+        ],
+      ),
+    );
+  }
+
+  Widget _row() {
+    return Row(
         children: [
           IconButton(
             onPressed: onMenu,
@@ -161,6 +185,7 @@ class _TopBar extends StatelessWidget {
           const BrandStack(),
           if (Skins.skin.halloween) ...[const SizedBox(width: 28), const Bats()],
           if (Skins.skin.holiday == 'thanksgiving') ...[const SizedBox(width: 24), const HarvestBar()],
+          if (Skins.skin.holiday == 'christmas') ...[const SizedBox(width: 24), const WinterScene()],
           const Spacer(),
           Text(
             section.toUpperCase(),
@@ -168,7 +193,6 @@ class _TopBar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
         ],
-      ),
     );
   }
 }

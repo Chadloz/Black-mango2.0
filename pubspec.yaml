@@ -84,6 +84,9 @@ flutter:
     - family: BerkshireSwash
       fonts:
         - asset: assets/fonts/BerkshireSwash.ttf
+    - family: MountainsOfChristmas
+      fonts:
+        - asset: assets/fonts/MountainsOfChristmas.ttf
     - family: Outfit
       fonts:
         - asset: assets/fonts/Outfit.ttf

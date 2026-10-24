@@ -2,6 +2,7 @@ import 'dart:async';
 import '../../app/skins.dart';
 import '../../core/widgets/halloween.dart';
 import '../../core/widgets/thanksgiving.dart';
+import '../../core/widgets/christmas.dart';
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/services.dart';
@@ -233,6 +234,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
       messenger.showSnackBar(SnackBar(content: Text('Saved "$name". Loading...')));
       if (Skins.skin.halloween) Ghost.boo(overlay, name); // Halloween skins: a ghost says Boo!
       if (Skins.skin.holiday == 'thanksgiving') Turkey.gobble(overlay, name); // Thanksgiving: Gobble!
+      if (Skins.skin.holiday == 'christmas') Present.open(overlay, name); // Christmas: Ho ho ho!
       final account = await Services.accounts.get(id);
       if (account != null) {
         Services.catalog.load(account).then(
@@ -271,6 +273,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
     messenger.showSnackBar(SnackBar(content: Text('Saved ${ids.length} accounts. Loading them one at a time...')));
     if (Skins.skin.halloween) Ghost.boo(overlay, ids.length == 1 ? ids.first.$2 : '${ids.length} accounts');
     if (Skins.skin.holiday == 'thanksgiving') Turkey.gobble(overlay, ids.length == 1 ? ids.first.$2 : '${ids.length} accounts');
+    if (Skins.skin.holiday == 'christmas') Present.open(overlay, ids.length == 1 ? ids.first.$2 : '${ids.length} accounts');
     for (final (id, name) in ids) {
       final account = await Services.accounts.get(id);
       if (account == null) continue;
