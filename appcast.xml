@@ -3,6 +3,91 @@
   <channel>
     <title>Black Mango</title>
     <item>
+      <title>Black Mango 2.0.0-beta.7 for Windows</title>
+      <pubDate>Sat, 24 Oct 2026 13:25:51 +0000</pubDate>
+      <sparkle:version>2.0.0+6</sparkle:version>
+      <sparkle:shortVersionString>2.0.0-beta.7</sparkle:shortVersionString>
+      <description><![CDATA[<h2>Black Mango 2.0, test build 7</h2>
+<h3>New: make your own skins</h3>
+<ul>
+<li>Skins now has its own page: <b>Settings &gt; Skins</b>.</li>
+<li><b>Make your own:</b> start from the skin you&#x27;re using or from Black Mango, then pick colors. The whole app changes as you go, and nothing is kept until you save.</li>
+<li><b>Simple</b> asks for three colors (background, panels and accent) and works out the rest. <b>Advanced</b> lets you set all of them, including the player buttons.</li>
+<li>Pick colors with a <b>color wheel</b>, by typing a <b>hex code</b>, or from the <b>built-in skins&#x27; colors</b>.</li>
+<li><b>Pick from screen:</b> an eyedropper that takes a color from anything on your screen, even outside Black Mango.</li>
+<li><b>Skin from a picture:</b> choose a picture and Black Mango suggests a skin in its colors. Then click the picture to take any color from it.</li>
+<li><b>Textures:</b> grain, carbon fiber, brushed metal or paper, or your own picture. Give each area its own: the background, the top bar and sidebar, cards, search boxes, and highlights. Set each one&#x27;s strength, size and tint. Your own picture can fill an area like a wallpaper or repeat as a pattern.</li>
+<li>If some text would be hard to read, Black Mango tells you when you save. You can go back, keep your colors, or let it fix just those colors.</li>
+<li>Add the <b>Halloween extras</b> to any skin: decorations, the dripping title font and the jack-o&#x27;-lantern logo.</li>
+<li><b>My skins</b> keeps as many as you like. Share one as a <b>skin code</b> to paste anywhere, or as a <b>skin file</b> (the file includes your own picture; a code can&#x27;t fit one). Paste a code or import a file to add someone else&#x27;s. Pasting a skin code into Add Account works too.</li>
+</ul>
+<h3>New: holiday skin drops</h3>
+<ul>
+<li>Open Black Mango during a holiday and you collect that holiday&#x27;s skin pack, yours for good. A gift box opens to show it off.</li>
+<li><b>Thanksgiving</b> (November 1 through Thanksgiving Day): Harvest, Autumn Leaves, and Cranberry &amp; Gold, with a mango turkey, leaves drifting down, a harvest of pumpkins and pie in the top bar, and a turkey who says Gobble! when you add an account.</li>
+<li><b>Christmas</b> (the day after Thanksgiving through December 25): Classic Christmas, Snowy Night, and Candy Cane, with the mango in a Santa hat holding a candy cane, snow falling, twinkling lights along the top, a snowman, an elf and a reindeer, frosty corners, and a present that pops open when you add an account.</li>
+<li>Collected skins live in <b>My skins</b> with a star. They can&#x27;t be shared as a code or file, but you can make a copy in their colors to edit.</li>
+<li>Watch for surprise drops, and giveaway codes: type one in <b>Settings &gt; Skins &gt; Redeem a code</b>.</li>
+</ul>
+<h3>Safer</h3>
+<ul>
+<li>The video player never hands links to other programs like yt-dlp.</li>
+<li>The behind-the-scenes relay that plays live channels now only answers the player on your own computer.</li>
+<li>Open in VLC only passes real stream links.</li>
+<li><b>Settings &gt; App updates</b> has a switch for automatic update checks. Updates are always signed, and you always choose whether to install.</li>
+<li>Each release now lists every file&#x27;s checksum, and GitHub can confirm the files were built from the public code. See SECURITY.md in the repository.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li><b>Mouse users:</b> category strips in Live TV, Movies and Shows have a scrollbar, and the mouse wheel slides them. Rows on Home have a scrollbar too, and the wheel slides a row while you&#x27;re over its scrollbar.</li>
+<li>The floating player no longer squeezes Live TV&#x27;s guide into a tiny window behind it.</li>
+</ul>]]></description>
+      <enclosure url="https://github.com/Chadloz/Black-mango2.0/releases/download/v2.0.0-beta.7/Black-Mango-2.0.0-beta.7-Setup.exe" length="28739716" type="application/octet-stream" sparkle:os="windows" sparkle:version="2.0.0+6" sparkle:shortVersionString="2.0.0-beta.7" sparkle:installerArguments="/SILENT /SP- /SUPPRESSMSGBOXES /NORESTART" sparkle:dsaSignature="MDwCHDJpSCnh3MKzkSUuFaNATcEoAxb8R6S5sICpbQoCHHBlBaQbV33uy1wGiTdZ/gPPYpRdOfxIdyPfdwY="/>
+    </item>
+    <item>
+      <title>Black Mango 2.0.0-beta.7</title>
+      <pubDate>Sat, 24 Oct 2026 13:25:51 +0000</pubDate>
+      <sparkle:version>6</sparkle:version>
+      <sparkle:shortVersionString>2.0.0-beta.7</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<h2>Black Mango 2.0, test build 7</h2>
+<h3>New: make your own skins</h3>
+<ul>
+<li>Skins now has its own page: <b>Settings &gt; Skins</b>.</li>
+<li><b>Make your own:</b> start from the skin you&#x27;re using or from Black Mango, then pick colors. The whole app changes as you go, and nothing is kept until you save.</li>
+<li><b>Simple</b> asks for three colors (background, panels and accent) and works out the rest. <b>Advanced</b> lets you set all of them, including the player buttons.</li>
+<li>Pick colors with a <b>color wheel</b>, by typing a <b>hex code</b>, or from the <b>built-in skins&#x27; colors</b>.</li>
+<li><b>Pick from screen:</b> an eyedropper that takes a color from anything on your screen, even outside Black Mango.</li>
+<li><b>Skin from a picture:</b> choose a picture and Black Mango suggests a skin in its colors. Then click the picture to take any color from it.</li>
+<li><b>Textures:</b> grain, carbon fiber, brushed metal or paper, or your own picture. Give each area its own: the background, the top bar and sidebar, cards, search boxes, and highlights. Set each one&#x27;s strength, size and tint. Your own picture can fill an area like a wallpaper or repeat as a pattern.</li>
+<li>If some text would be hard to read, Black Mango tells you when you save. You can go back, keep your colors, or let it fix just those colors.</li>
+<li>Add the <b>Halloween extras</b> to any skin: decorations, the dripping title font and the jack-o&#x27;-lantern logo.</li>
+<li><b>My skins</b> keeps as many as you like. Share one as a <b>skin code</b> to paste anywhere, or as a <b>skin file</b> (the file includes your own picture; a code can&#x27;t fit one). Paste a code or import a file to add someone else&#x27;s. Pasting a skin code into Add Account works too.</li>
+</ul>
+<h3>New: holiday skin drops</h3>
+<ul>
+<li>Open Black Mango during a holiday and you collect that holiday&#x27;s skin pack, yours for good. A gift box opens to show it off.</li>
+<li><b>Thanksgiving</b> (November 1 through Thanksgiving Day): Harvest, Autumn Leaves, and Cranberry &amp; Gold, with a mango turkey, leaves drifting down, a harvest of pumpkins and pie in the top bar, and a turkey who says Gobble! when you add an account.</li>
+<li><b>Christmas</b> (the day after Thanksgiving through December 25): Classic Christmas, Snowy Night, and Candy Cane, with the mango in a Santa hat holding a candy cane, snow falling, twinkling lights along the top, a snowman, an elf and a reindeer, frosty corners, and a present that pops open when you add an account.</li>
+<li>Collected skins live in <b>My skins</b> with a star. They can&#x27;t be shared as a code or file, but you can make a copy in their colors to edit.</li>
+<li>Watch for surprise drops, and giveaway codes: type one in <b>Settings &gt; Skins &gt; Redeem a code</b>.</li>
+</ul>
+<h3>Safer</h3>
+<ul>
+<li>The video player never hands links to other programs like yt-dlp.</li>
+<li>The behind-the-scenes relay that plays live channels now only answers the player on your own computer.</li>
+<li>Open in VLC only passes real stream links.</li>
+<li><b>Settings &gt; App updates</b> has a switch for automatic update checks. Updates are always signed, and you always choose whether to install.</li>
+<li>Each release now lists every file&#x27;s checksum, and GitHub can confirm the files were built from the public code. See SECURITY.md in the repository.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li><b>Mouse users:</b> category strips in Live TV, Movies and Shows have a scrollbar, and the mouse wheel slides them. Rows on Home have a scrollbar too, and the wheel slides a row while you&#x27;re over its scrollbar.</li>
+<li>The floating player no longer squeezes Live TV&#x27;s guide into a tiny window behind it.</li>
+</ul>]]></description>
+      <enclosure url="https://github.com/Chadloz/Black-mango2.0/releases/download/v2.0.0-beta.7/Black-Mango-2.0.0-beta.7.zip" length="42493035" type="application/octet-stream" sparkle:os="macos" sparkle:edSignature="grrpuGmUPSssp2ar4VYaWdpr8ZnzWjBug7Dlzhd+aNHirEfrVhTxUxXA1mCJZH420rPny4TFKRjn9Kw6ZTYRDw=="/>
+    </item>
+    <item>
       <title>Black Mango 2.0.0-beta.6 for Windows</title>
       <pubDate>Fri, 23 Oct 2026 23:22:58 +0000</pubDate>
       <sparkle:version>2.0.0+5</sparkle:version>
