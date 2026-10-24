@@ -132,7 +132,7 @@ jobs:
           SIG=$(printf '%s' "$SPARKLE_PRIVATE_KEY" | ./sparkle/bin/sign_update --ed-key-file - "dist/Black-Mango-${{ steps.v.outputs.ver }}.zip")
           echo "sig=$SIG" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: windows-installer
           path: dist
