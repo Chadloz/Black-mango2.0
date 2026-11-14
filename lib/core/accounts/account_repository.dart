@@ -63,6 +63,12 @@ class AccountRepository {
   Future<String?> password(String id) => secrets.read(_passKey(id));
   Future<String?> playlistUrl(String id) => secrets.read(_urlKey(id));
 
+  /// Points an M3U account at a new playlist address (a free pack whose list moved).
+  Future<void> setPlaylist(String id, String url, String server) async {
+    await secrets.write(_urlKey(id), url);
+    await (db.update(db.accounts)..where((a) => a.id.equals(id))).write(AccountsCompanion(server: Value(server)));
+  }
+
   static String _passKey(String id) => 'account.$id.password';
   static String _urlKey(String id) => 'account.$id.url';
 }

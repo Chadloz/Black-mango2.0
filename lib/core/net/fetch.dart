@@ -13,6 +13,12 @@ class BMError implements Exception {
   String toString() => message;
 }
 
+/// A load that was stopped on purpose: the Stop button, or a portal answering too slowly to be
+/// worth the wait. Nothing went wrong, and the channels already saved are untouched.
+class LoadStopped extends BMError {
+  LoadStopped(super.message);
+}
+
 Future<String> fetchText(Uri uri, {Duration timeout = const Duration(seconds: 60)}) async {
   final client = HttpClient()
     ..userAgent = bmUserAgent

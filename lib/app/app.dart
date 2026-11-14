@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'shell.dart';
 import 'skins.dart';
+import '../core/hotkeys.dart';
 
 class BlackMangoApp extends StatefulWidget {
   const BlackMangoApp({super.key});
@@ -43,6 +44,15 @@ class _BlackMangoAppState extends State<BlackMangoApp> {
       title: 'Black Mango',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
+      // Sits above every screen and below Flutter's built-in keyboard shortcuts: a key one of our
+      // shortcuts already used (arrows on Live TV, Tab) stops here, so Flutter doesn't also move
+      // its focus box with it. See Hotkeys.ownsFocusKey.
+      builder: (context, child) => Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onKeyEvent: (node, e) => Hotkeys.ownsFocusKey(e) ? KeyEventResult.handled : KeyEventResult.ignored,
+        child: child!,
+      ),
       home: const Shell(),
     );
   }

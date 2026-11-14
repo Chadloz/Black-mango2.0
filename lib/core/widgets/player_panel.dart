@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'player_message.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../../app/theme.dart';
 import '../services.dart';
@@ -27,24 +28,7 @@ class PlayerPanel extends StatelessWidget {
                   controls: (state) => BMControls(state: state, rightInset: 48),
                 ),
                 const Positioned.fill(child: HandOffOverlay()),
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  // Reconnect status first; otherwise a short note (like a channel getting extra buffer).
-                  child: ListenableBuilder(
-                    listenable: Listenable.merge([Services.playback.reconnecting, Services.playback.playerNote]),
-                    builder: (context, _) {
-                      final msg = Services.playback.reconnecting.value ?? Services.playback.playerNote.value;
-                      return msg == null
-                          ? const SizedBox.shrink()
-                          : Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
-                              child: Text(msg, style: TextStyle(color: BMColors.mango, fontWeight: FontWeight.w600)),
-                            );
-                    },
-                  ),
-                ),
+                const PlayerMessage(buttonsWidth: 210), // this player also has a close button up there
                 Positioned(
                   top: 8,
                   right: 8,

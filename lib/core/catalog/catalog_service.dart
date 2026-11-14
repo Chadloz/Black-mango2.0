@@ -167,13 +167,36 @@ class CatalogService {
   final vodStatus = ValueNotifier<String?>(null);
 
   void _set(String id, String? msg) {
+    // A step that took over 8 seconds goes in the log, so a slow load shows where the time went.
+    // ("Loading live channels (12/929)" and "(13/929)" are the same step.)
+    final step = msg?.replaceAll(RegExp(r'\s*\(\d+/\d+\)'), '');
+    final was = _stepOf[id];
+    if (was != null && was.$1 != step) {
+      final took = DateTime.now().difference(was.$2).inSeconds;
+      if (took >= 8) debugPrint('[load] ${_loadNames[id] ?? id}: "${was.$1}" took $took s');
+    }
+    if (step == null) {
+      _stepOf.remove(id);
+    } else if (was == null || was.$1 != step) {
+      _stepOf[id] = (step, DateTime.now());
+    }
     final m = Map<String, String>.from(status.value);
     if (msg == null) {
       m.remove(id);
     } else {
-      m[id] = msg;
+      m[id] = _stopping.contains(id) ? 'Stopping...' : msg; // once Stop is pressed, it says so until it has
     }
     status.value = m;
+  }
+
+  final _stopping = <String>{}; // accounts whose load was asked to stop
+
+  /// Stops an account's load (the Stop button). It ends at the next step, usually within a few
+  /// seconds, and what's already saved for the account stays exactly as it was.
+  void stop(String accountId) {
+    if (!status.value.containsKey(accountId)) return;
+    _stopping.add(accountId);
+    _set(accountId, 'Stopping...');
   }
 
   // ---------- Queries ----------
@@ -270,11 +293,19 @@ class CatalogService {
           ..limit(500))
         .get();
     final matches = rows.where((r) => normName(r.name) == target).toList();
-    // Same country, or at least the same language: a Spanish feed shouldn't switch to an English one.
+    // Another country's channel only counts in the same language: a Spanish feed shouldn't switch
+    // to an English one. Channels with no country label stay in (most are the same feed).
     if (item.language.isNotEmpty) {
-      matches.removeWhere((r) => r.country != item.country && r.language != item.language);
+      matches.removeWhere((r) => r.country.isNotEmpty && r.country != item.country && r.language != item.language);
     }
-    matches.sort((a, b) => (a.country == item.country ? 0 : 1).compareTo(b.country == item.country ? 0 : 1));
+    // Closest first: the same country, then no country label, then (the last resort) another
+    // country in the same language. Within each, the provider's own order.
+    int tier(Item r) => r.country == item.country ? 0 : (r.country.isEmpty ? 1 : 2);
+    final order = {for (var i = 0; i < matches.length; i++) matches[i].id: i};
+    matches.sort((a, b) {
+      final t = tier(a).compareTo(tier(b));
+      return t != 0 ? t : order[a.id]!.compareTo(order[b.id]!);
+    });
     // Accounts on a server that already failed share its outage, so skip them.
     if (excludeHosts.isNotEmpty) {
       final accts = await db.select(db.accounts).get();
@@ -324,12 +355,43 @@ class CatalogService {
   }
 
   /// Downloads everything for an account and replaces what was stored.
-  Future<String> load(Account a) async {
+  /// [minRows] (background refreshes of free packs): a playlist that comes back with fewer
+  /// entries than this is refused, so a list that closed can't wipe out the channels you have.
+  Future<String> load(Account a, {int? minRows}) async {
     if (status.value.containsKey(a.id)) return 'Already loading.';
+    // Loads used to leave no trace in the log, so a slow or failed one couldn't be diagnosed.
+    final clock = Stopwatch()..start();
+    _loadNames[a.id] = a.name;
+    debugPrint('[load] ${a.name} (${a.type}): started');
     try {
+      final msg = await _load(a, minRows: minRows);
+      debugPrint('[load] ${a.name}: finished in ${clock.elapsed.inSeconds} s. $msg');
+      return msg;
+    } on LoadStopped catch (e) {
+      debugPrint('[load] ${a.name}: stopped after ${clock.elapsed.inSeconds} s. $e');
+      rethrow;
+    } catch (e) {
+      debugPrint('[load] ${a.name}: failed after ${clock.elapsed.inSeconds} s: $e');
+      rethrow;
+    } finally {
+      _loadNames.remove(a.id);
+      _stepOf.remove(a.id);
+    }
+  }
+
+  final _loadNames = <String, String>{}; // account id -> name, while it loads (for the log)
+  final _stepOf = <String, (String, DateTime)>{}; // account id -> the step it's on, and since when
+
+  Future<String> _load(Account a, {int? minRows}) async {
+    try {
+      _stopping.remove(a.id);
       _set(a.id, 'Starting...');
       final rows = <ItemsCompanion>[];
       final id = a.id;
+      // Between steps: if Stop was pressed, end here. Nothing has been saved yet at any of them.
+      void check() {
+        if (_stopping.contains(id)) throw LoadStopped('Stopped. Anything already saved for this account is unchanged.');
+      }
       Set<String>? onlyKinds; // Stalker: reload live channels only; cached movies and shows stay
       if (a.type == 'xtream') {
         final pass = await accounts.password(a.id) ?? '';
@@ -343,12 +405,14 @@ class CatalogService {
         _set(id, 'Sorting live channels...');
         rows.addAll(await _xtreamRowsInBackground(id, 'live', live, liveCats, 'stream_id', 'stream_icon', null));
 
+        check();
         _set(id, 'Loading movies...');
         final vod = await x.list('get_vod_streams');
         final vodCats = await x.categories('get_vod_categories');
         _set(id, 'Sorting movies...');
         rows.addAll(await _xtreamRowsInBackground(id, 'movie', vod, vodCats, 'stream_id', 'stream_icon', 'container_extension'));
 
+        check();
         _set(id, 'Loading shows...');
         final series = await x.list('get_series');
         final seriesCats = await x.categories('get_series_categories');
@@ -359,8 +423,12 @@ class CatalogService {
         if (url.isEmpty) throw BMError('No playlist link saved for this account.');
         _set(id, 'Downloading playlist...');
         final text = await fetchText(Uri.parse(url), timeout: const Duration(minutes: 3));
+        check();
         _set(id, 'Reading playlist...');
         rows.addAll(await _m3uRowsInBackground(id, text));
+        if (minRows != null && rows.length < minRows) {
+          throw BMError('the list came back with only ${rows.length} entries');
+        }
       } else if (a.type == 'stalker') {
         final s = StalkerHub.of(a);
         _set(id, 'Connecting to the portal...');
@@ -369,7 +437,13 @@ class CatalogService {
         if (exp != null && exp > 0) Prefs.setInt('acct.${a.id}.exp', exp);
         _set(id, 'Loading live channels...');
         final genres = await s.liveGenres();
-        final list = await s.liveChannels(progress: (done, total) => _set(id, 'Loading live channels ($done/$total)...'));
+        final list = await s.liveChannels(
+          progress: (done, total) => _set(id, 'Loading live channels ($done/$total)...'),
+          note: (m) => _set(id, m),
+          stopped: () => _stopping.contains(id),
+          // You already have this account's channels: a crawling portal isn't worth 45 minutes.
+          giveUpIfSlow: a.liveCount > 0,
+        );
         _set(id, 'Sorting live channels...');
         final api = s.api ?? '';
         rows.addAll(await _stalkerRowsInBackground(id, api, list, genres));
@@ -377,6 +451,7 @@ class CatalogService {
       } else {
         throw BMError('Unknown account type.');
       }
+      check();
       _set(id, 'Saving ${rows.length} items...');
       await _replace(id, rows, kinds: onlyKinds);
       if (onlyKinds != null) {
@@ -394,6 +469,7 @@ class CatalogService {
       await accounts.updateCounts(id, live, movies, shows);
       return 'Loaded $live live, $movies movies, $shows shows.';
     } finally {
+      _stopping.remove(a.id);
       _set(a.id, null);
     }
   }

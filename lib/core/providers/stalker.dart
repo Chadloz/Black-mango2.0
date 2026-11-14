@@ -11,7 +11,7 @@ import 'dart:isolate';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
-import '../net/fetch.dart' show BMError;
+import '../net/fetch.dart' show BMError, LoadStopped;
 import '../prefs.dart';
 import '../storage/database.dart';
 
@@ -404,18 +404,50 @@ class StalkerClient {
 
   /// Every live channel: one request where the portal allows it,
   /// otherwise the page-by-page list, 4 pages at a time.
-  Future<List<Map>> liveChannels({void Function(int done, int total)? progress}) async {
-    try {
-      final j = await request({'type': 'itv', 'action': 'get_all_channels', 'force_ch_link_check': ''},
-          timeout: const Duration(seconds: 60));
-      final data = j is Map ? j['data'] : null;
-      if (data is List && data.isNotEmpty) {
-        debugPrint('[stalker] channel list: all at once (${data.length})');
-        return data.whereType<Map>().toList();
-      }
-    } catch (e) {
-      debugPrint('[stalker] all-at-once list not available ($e); loading page by page');
+  ///
+  /// A slow portal used to make this crawl: the one request timed out, and the page-by-page
+  /// fallback then took 10 to 15 seconds a page (45 minutes for one account, test build 8). So:
+  /// - the one request gets a second try when the first only failed for being slow;
+  /// - [stopped] is asked between requests, so a Stop button works;
+  /// - with [giveUpIfSlow] (the account already has channels), page by page gives up when the
+  ///   portal is plainly crawling. Never more pages at once: portals block accounts for that.
+  Future<List<Map>> liveChannels({
+    void Function(int done, int total)? progress,
+    void Function(String note)? note,
+    bool Function()? stopped,
+    bool giveUpIfSlow = false,
+  }) async {
+    void checkStop() {
+      if (stopped?.call() ?? false) throw LoadStopped('Stopped. Anything already saved for this account is unchanged.');
     }
+
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final j = await request({'type': 'itv', 'action': 'get_all_channels', 'force_ch_link_check': ''},
+            timeout: const Duration(seconds: 60));
+        final data = j is Map ? j['data'] : null;
+        if (data is List && data.isNotEmpty) {
+          debugPrint('[stalker] channel list: all at once (${data.length})');
+          return data.whereType<Map>().toList();
+        }
+        break; // it answered, just without a list: this portal doesn't offer one
+      } catch (e) {
+        checkStop();
+        // Slow or unreachable is worth one more try. An error answer means it doesn't have it.
+        final slow = '$e'.contains('too long') || '$e'.startsWith('Could not reach');
+        if (attempt == 0 && slow) {
+          debugPrint('[stalker] all-at-once list failed ($e); trying it once more');
+          note?.call('The portal is slow. Trying the full list once more...');
+          continue;
+        }
+        debugPrint('[stalker] all-at-once list not available ($e); loading page by page');
+        break;
+      }
+    }
+    checkStop();
+    note?.call('Loading live channels page by page...');
+    final clock = Stopwatch()..start();
+    var halted = false; // one worker stopped the load: the others finish what they're on and quit
 
     Map<String, String> q(int p) =>
         {'type': 'itv', 'action': 'get_ordered_list', 'genre': '*', 'fav': '0', 'sortby': 'number', 'p': '$p'};
@@ -435,6 +467,11 @@ class StalkerClient {
 
     Future<void> worker() async {
       while (true) {
+        if (halted) return;
+        if (stopped?.call() ?? false) {
+          halted = true;
+          throw LoadStopped('Stopped. Anything already saved for this account is unchanged.');
+        }
         final p = next++;
         if (p > pages) return;
         var rows = <Map>[];
@@ -447,8 +484,24 @@ class StalkerClient {
             await Future.delayed(Duration(milliseconds: 800 * (attempt + 1)));
           }
         }
+        if (halted) return;
         byPage[p] = rows;
         progress?.call(++done, pages);
+        // Crawling? Judge after a fair sample (8 pages, or 40 seconds). Both must be true: the
+        // whole list would take over 5 minutes, AND each request is taking over 4 seconds. A big
+        // list on a healthy portal is slow but fine, and is left alone.
+        if (giveUpIfSlow && (done >= 8 || clock.elapsed > const Duration(seconds: 40))) {
+          final msPerPage = clock.elapsedMilliseconds / done; // wall time per finished page, 4 at a time
+          final minutes = msPerPage * pages / 60000;
+          final secondsPerRequest = msPerPage * 4 / 1000;
+          if (minutes > 5 && secondsPerRequest > 4) {
+            halted = true;
+            debugPrint('[stalker] page by page is crawling (about ${secondsPerRequest.toStringAsFixed(0)} s a page, '
+                '${minutes.round()} min for the list); keeping the saved channels');
+            throw LoadStopped('This portal is answering very slowly right now (its full list would take about '
+                '${minutes.round()} minutes). The channels you already had are still here. Try Reload again later.');
+          }
+        }
       }
     }
 
@@ -637,12 +690,22 @@ class StalkerClient {
     return link;
   }
 
-  /// Keep-alive: what a MAG box sends so the portal doesn't drop the session.
+  bool _noKeepAlive = false; // this portal answered the keep-alive with 404: it doesn't have one
+
+  /// Keep-alive: what a MAG box sends so the portal doesn't drop the session. A portal without
+  /// one (404) isn't asked again until the app restarts; if its session does run out, the next
+  /// request logs in again on its own.
   Future<void> watchdog() async {
+    if (_noKeepAlive) return;
     try {
       await request({'type': 'watchdog', 'action': 'get_events', 'event_active_id': '0', 'init': '0', 'cur_play_type': '1'});
     } catch (e) {
-      debugPrint('[stalker] keep-alive failed: $e');
+      if ('$e'.contains('404')) {
+        _noKeepAlive = true;
+        debugPrint("[stalker] this portal has no keep-alive (it answered 404); not asking it again until the app restarts");
+      } else {
+        debugPrint('[stalker] keep-alive failed: $e');
+      }
     }
   }
 

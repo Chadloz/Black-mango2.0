@@ -5,6 +5,7 @@ import '../app/nav.dart';
 import 'prefs.dart';
 import 'services.dart';
 import 'storage/database.dart';
+import 'startup_log.dart';
 
 /// Remembers what was playing and which screen was open, and restores it on launch.
 /// Live channels resume playing; movies and episodes come back paused at your spot.
@@ -80,7 +81,8 @@ class Session {
         extra: m['extra'] as String?,
       );
       if (await Services.accounts.get(item.accountId) == null) return;
-      await Services.playback.play(item, autoplay: mode == 'resume' && item.kind == 'live');
+      await StartupLog.time(
+          'reopening what was playing', () => Services.playback.play(item, autoplay: mode == 'resume' && item.kind == 'live'));
       debugPrint('[session] restored ${item.kind}: ${item.name}');
     } catch (e) {
       debugPrint('[session] could not restore: $e');

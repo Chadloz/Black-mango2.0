@@ -10,6 +10,7 @@ import '../../core/backup.dart';
 import '../../core/playback/still_watching.dart';
 import '../../core/playback/live_buffer.dart';
 import '../../core/updates.dart';
+import '../../core/renderer_switch.dart';
 import '../../app/skins.dart';
 import 'skins_page.dart';
 
@@ -247,6 +248,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           sub: 'Some channels label Dolby Digital Plus audio in a way the video engine skips, so they play silent. This relabels it on the fly. If live channels ever misbehave, turn it off. Applies to the next channel you open.',
         ),
+        if (RendererSwitch.available) ...[
+          _section('WINDOWS'),
+          _row(
+            'Use the older drawing engine',
+            Switch(
+              value: RendererSwitch.classic,
+              onChanged: (v) {
+                RendererSwitch.set(v);
+                setState(() {});
+              },
+            ),
+            sub: 'A troubleshooting switch. If Black Mango freezes for a while when it opens, turn this on, close Black Mango, open it again, and see if the freeze is gone. It takes effect the next time Black Mango opens.',
+          ),
+        ],
         _section('MINI PLAYER'),
         _row(
           'Float when I switch to another app',

@@ -16,6 +16,7 @@ import '../accounts/account_repository.dart';
 import '../net/fetch.dart';
 import '../catalog/details.dart';
 import '../providers/stalker.dart';
+import '../startup_log.dart';
 
 /// One shared mpv player for the whole app.
 class PlaybackService {
@@ -52,13 +53,14 @@ class PlaybackService {
     player.stream.log.listen((l) {
       final t = l.text.toLowerCase();
       if (t.contains('http error 403')) _last403 = DateTime.now();
+      if (t.contains('failed to resolve hostname')) _lastNoServer = DateTime.now();
       final hm = RegExp(r'http error (\d{3})').firstMatch(t);
       if (hm != null) {
         _lastHttpCode = int.tryParse(hm.group(1)!);
         _lastHttpAt = DateTime.now();
       }
       if (t.contains('empty segment')) return; // normal for ad-spliced free channels
-      if (t.contains('reconnect') || t.contains('http') || t.contains('end of file') || t.contains('timeout') || t.contains('eof')) {
+      if (t.contains('reconnect') || t.contains('http') || t.contains('end of file') || t.contains('timeout') || t.contains('eof') || t.contains('resolve')) {
         debugPrint('[mpv] ${l.prefix}: ${l.text.trim()}');
       }
     });
@@ -110,7 +112,14 @@ class PlaybackService {
   }
 
   final Player player = Player(configuration: const PlayerConfiguration(logLevel: MPVLogLevel.warn, libass: true));
-  late final VideoController controller = VideoController(player);
+  late final VideoController controller = () {
+    // Timed for the log: on Windows this is where the picture surface is set up with the graphics card.
+    final sw = Stopwatch()..start();
+    StartupLog.doing('create the video surface');
+    final c = VideoController(player);
+    debugPrint('[startup] video surface created: ${sw.elapsedMilliseconds} ms');
+    return c;
+  }();
 
   /// What's playing right now (null = nothing).
   final current = ValueNotifier<Item?>(null);
@@ -124,25 +133,26 @@ class PlaybackService {
   String? _lastUrl;
   bool _started = false; // true once the stream has actually played
   DateTime? _last403;
+  DateTime? _lastNoServer; // the stream's server name didn't resolve (it doesn't exist, or no internet)
   int? _lastHttpCode; // last HTTP error status seen (404, 502...)
 
   /// Logs the stream's tracks once it starts, e.g. to diagnose a silent channel.
   Future<void> _logTracks() async {
     try {
       final np = player.platform as NativePlayer;
-      final n = int.tryParse(await np.getProperty('track-list/count')) ?? 0;
+      final n = int.tryParse(await _getP(np, 'track-list/count')) ?? 0;
       final parts = <String>[];
       for (var i = 0; i < n && i < 12; i++) {
-        final type = await np.getProperty('track-list/$i/type');
+        final type = await _getP(np, 'track-list/$i/type');
         if (type == 'sub') continue;
-        final codec = await np.getProperty('track-list/$i/codec');
-        final lang = await np.getProperty('track-list/$i/lang');
-        final sel = await np.getProperty('track-list/$i/selected');
-        final ch = type == 'audio' ? await np.getProperty('track-list/$i/demux-channel-count') : '';
+        final codec = await _getP(np, 'track-list/$i/codec');
+        final lang = await _getP(np, 'track-list/$i/lang');
+        final sel = await _getP(np, 'track-list/$i/selected');
+        final ch = type == 'audio' ? await _getP(np, 'track-list/$i/demux-channel-count') : '';
         parts.add('$type $codec${lang.isNotEmpty ? ' [$lang]' : ''}${ch.isNotEmpty ? ' ${ch}ch' : ''}${sel == 'yes' ? ' *' : ''}');
       }
-      final vol = await np.getProperty('volume');
-      final mute = await np.getProperty('mute');
+      final vol = await _getP(np, 'volume');
+      final mute = await _getP(np, 'mute');
       debugPrint('[tracks] ${parts.join(' | ')}  (volume $vol, mute $mute)');
     } catch (e) {
       debugPrint('[tracks] could not read: $e');
@@ -194,18 +204,23 @@ class PlaybackService {
     if (np is! NativePlayer) return;
     // Never hand a link to yt-dlp (or youtube-dl), even if it's installed: IPTV doesn't need it,
     // and it would let a provider's link start another program. (Security review, Oct 2026.)
-    await np.setProperty('ytdl', 'no');
+    await _setP(np, 'ytdl', 'no');
     final path = (Uri.tryParse(url)?.path ?? '').toLowerCase();
     // Stalker live links (/play/live.php?...) don't look like .ts, but they are endless MPEG-TS.
     final isEndlessTs = path.endsWith('.ts') || RegExp(r'/\d+$').hasMatch(path) || (item.kind == 'live' && _stalkerKnown(item));
     final isFile = RegExp(r'\.(mkv|mp4|avi|mov|m4v|wmv|flv|webm)$').hasMatch(path);
     // Stalker: a busy one-connection server can take up to ~45 s to answer. Wait for it
     // instead of giving up at 15 s and retrying (each retry would queue behind the last).
-    await np.setProperty('network-timeout', item.kind == 'live' && _stalkerKnown(item) ? '60' : '15');
+    // Other live channels that go through the relay: the relay does the reconnecting, and that
+    // takes time (8 s to be sure the provider went quiet, then up to 10 more to get back on). At
+    // 15 s the player gave up mid-reconnect and opened a second connection of its own, which is
+    // what "reconnect failed: Client is closed" was. So the player outwaits the relay.
+    final relayed = item.kind == 'live' && isEndlessTs && TsRelay.relays(url);
+    await _setP(np, 'network-timeout', item.kind == 'live' && _stalkerKnown(item) ? '60' : (relayed ? '40' : '15'));
     if (isEndlessTs || isFile) {
       // One continuous download: let FFmpeg reconnect on drops.
       // Live .ts also reconnects at "end of file", since a live channel never truly ends.
-      await np.setProperty(
+      await _setP(np, 
         'stream-lavf-o',
         [
           'reconnect=1',
@@ -215,17 +230,17 @@ class PlaybackService {
           if (item.kind == 'live' && isEndlessTs) 'reconnect_at_eof=1',
         ].join(','),
       );
-      await np.setProperty('demuxer-lavf-o', '');
+      await _setP(np, 'demuxer-lavf-o', '');
       // Live .ts: look longer before deciding which tracks exist, so audio that is
       // announced late isn't missed (VLC is more patient here). Stops early when done.
       const deep = false; // tried for a silent channel; didn't help and slowed some starts
-      await np.setProperty('demuxer-lavf-probesize', deep ? '20000000' : '5000000');
-      await np.setProperty('demuxer-lavf-analyzeduration', deep ? '10' : '0');
+      await _setP(np, 'demuxer-lavf-probesize', deep ? '20000000' : '5000000');
+      await _setP(np, 'demuxer-lavf-analyzeduration', deep ? '10' : '0');
     } else {
       // HLS and redirect links: FFmpeg's reused connections fail on many CDNs,
       // so use a fresh connection per segment and retry segments instead.
-      await np.setProperty('stream-lavf-o', '');
-      await np.setProperty('demuxer-lavf-o', 'http_persistent=0,seg_max_retry=3,max_reload=10');
+      await _setP(np, 'stream-lavf-o', '');
+      await _setP(np, 'demuxer-lavf-o', 'http_persistent=0,seg_max_retry=3,max_reload=10');
     }
   }
 
@@ -314,6 +329,7 @@ class PlaybackService {
     _reconnectPending = false;
     _started = false;
     _startRetries = 0;
+    _lastNoServer = null; // a new pick starts clean
     reconnecting.value = null;
     _lastUrl = url;
     current.value = item;
@@ -323,7 +339,7 @@ class PlaybackService {
     await _applyTrackPrefs(item);
     TsRelay.cancelPending(); // requests for what you walked away from can't hold a connection slot
     _openedAt = DateTime.now();
-    await player.open(Media(_wrap(item, url), httpHeaders: _headersFor(item)), play: autoplay);
+    await _openP(Media(_wrap(item, url), httpHeaders: _headersFor(item)), play: autoplay);
     if (item.kind == 'live' && _stalkerKnown(item)) {
       // Normal Stalker starts take 3-5 s. Longer means the server is still holding your last channel.
       Future.delayed(const Duration(seconds: 6), () {
@@ -348,7 +364,7 @@ class PlaybackService {
     _shuttingDown = true;
     await _saveProgress();
     try {
-      await player.stop();
+      await _stopP();
     } catch (_) {}
   }
 
@@ -360,7 +376,7 @@ class PlaybackService {
     current.value = null;
     reconnecting.value = null;
     _lastUrl = null;
-    await player.stop();
+    await _stopP();
   }
 
   /// Tries the same channel on another account before showing an error.
@@ -378,10 +394,10 @@ class PlaybackService {
         _reconnectPending = false;
         if (current.value?.id != item.id) return;
         if (pos.inSeconds >= 5) {
-          await (player.platform as NativePlayer).setProperty('start', '${pos.inSeconds}');
+          await _setP(player.platform as NativePlayer, 'start', '${pos.inSeconds}');
         }
         await _reopen(item, url);
-        await player.play();
+        await _playP();
       });
       return;
     }
@@ -457,9 +473,36 @@ class PlaybackService {
     });
   }
 
+  // Every request to the video engine goes through one of these, so a freeze line in the log
+  // can name the request the app was stuck on (StartupLog.doing). They change nothing else.
+  Future<void> _setP(NativePlayer np, String name, String value) {
+    StartupLog.doing('set $name');
+    return np.setProperty(name, value);
+  }
+
+  Future<String> _getP(NativePlayer np, String name) {
+    StartupLog.doing('read $name');
+    return np.getProperty(name);
+  }
+
+  Future<void> _openP(Media media, {bool play = true}) {
+    StartupLog.doing('open a stream');
+    return player.open(media, play: play);
+  }
+
+  Future<void> _stopP() {
+    StartupLog.doing('stop the player');
+    return player.stop();
+  }
+
+  Future<void> _playP() {
+    StartupLog.doing('play');
+    return player.play();
+  }
+
   Future<String> _prop(NativePlayer np, String name) async {
     try {
-      return await np.getProperty(name);
+      return await _getP(np, name);
     } catch (_) {
       return '';
     }
@@ -500,11 +543,11 @@ class PlaybackService {
       if (setting != null && setting.isNotEmpty) return setting;
       return mac;
     }
-    await np.setProperty('alang', TrackMemory.expand(pick(mem['a'], Prefs.getStr('audio.lang'))));
-    await np.setProperty('slang', TrackMemory.expand(pick(mem['s'], Prefs.getStr('subs.lang'))));
+    await _setP(np, 'alang', TrackMemory.expand(pick(mem['a'], Prefs.getStr('audio.lang'))));
+    await _setP(np, 'slang', TrackMemory.expand(pick(mem['s'], Prefs.getStr('subs.lang'))));
     final on = mem['on'] is bool ? mem['on'] as bool : Prefs.getBool('subs.on');
     subsVisible.value = on;
-    await np.setProperty('sub-visibility', on ? 'yes' : 'no');
+    await _setP(np, 'sub-visibility', on ? 'yes' : 'no');
     if (mem.isNotEmpty) debugPrint('[tracks] using your saved choice for this show: $mem');
     // Live buffer: hold a few seconds in reserve before starting a channel, so short
     // provider stalls are absorbed instead of becoming skips. Movies don't need it.
@@ -513,8 +556,8 @@ class PlaybackService {
     if (item.kind == 'live' && LiveBuffer.extra(item) > 0) {
       debugPrint('[buffer] ${item.name}: using ${buf}s (this channel has extra buffer)');
     }
-    await np.setProperty('cache-pause-initial', buf > 0 ? 'yes' : 'no');
-    await np.setProperty('cache-pause-wait', '${buf > 0 ? buf : 1}');
+    await _setP(np, 'cache-pause-initial', buf > 0 ? 'yes' : 'no');
+    await _setP(np, 'cache-pause-wait', '${buf > 0 ? buf : 1}');
   }
 
   /// Track menu: pick an audio track (remembered for this show).
@@ -527,7 +570,7 @@ class PlaybackService {
   Future<void> subsOff() async {
     subsVisible.value = false;
     final np = player.platform;
-    if (np is NativePlayer) await np.setProperty('sub-visibility', 'no');
+    if (np is NativePlayer) await _setP(np, 'sub-visibility', 'no');
     TrackMemory.save(current.value, subsOn: false);
   }
 
@@ -715,7 +758,7 @@ class PlaybackService {
       final curId = int.tryParse(await _prop(np, 'current-tracks/video/id')) ?? -1;
       if (newest > 0 && newest != curId) {
         debugPrint('[playback] picture froze while audio continued; switching to the newest video track ($curId -> $newest)');
-        await np.setProperty('vid', '$newest');
+        await _setP(np, 'vid', '$newest');
         _wdReset();
         return;
       }
@@ -729,10 +772,10 @@ class PlaybackService {
       debugPrint('[playback] picture still frozen; reopening the stream');
       final tpos = double.tryParse(await _prop(np, 'time-pos'));
       if (cur.kind != 'live' && tpos != null && tpos > 5) {
-        await np.setProperty('start', '${tpos.floor()}');
+        await _setP(np, 'start', '${tpos.floor()}');
       }
       await _reopen(cur, url);
-      await player.play();
+      await _playP();
     }
   }
 
@@ -743,7 +786,10 @@ class PlaybackService {
       return;
     }
     _reconnectPending = true;
-    final alts = await cat.failoverCandidates(item, _triedAccounts, excludeHosts: {..._triedHosts, ...?health?.downHosts});
+    // Match against the channel you picked, not the backup that just failed: a chain of backups
+    // must not drift (US channel -> unlabeled copy -> another country's channel).
+    final ref = failoverOrigin ?? item;
+    final alts = await cat.failoverCandidates(ref, _triedAccounts, excludeHosts: {..._triedHosts, ...?health?.downHosts});
     _reconnectPending = false;
     if (current.value?.id != item.id) return; // you already picked something else
     if (alts.isEmpty) {
@@ -752,11 +798,16 @@ class PlaybackService {
     }
     final alt = alts.first;
     final acctName = (await accounts.get(alt.accountId))?.name ?? 'another account';
-    debugPrint('[playback] failover: ${item.name} -> ${alt.name} on $acctName');
+    // Another country's channel is the last resort (it's used only when nothing closer is left).
+    final lastResort = ref.country.isNotEmpty && alt.country.isNotEmpty && alt.country != ref.country;
+    debugPrint('[playback] failover: ${item.name} -> ${alt.name} on $acctName'
+        '${lastResort ? ' (last resort: ${alt.country}; no ${ref.country} backup left)' : ''}');
     failoverOrigin ??= item;
     try {
       await play(alt, isFailover: true);
-      reconnecting.value = 'Trying ${alt.name} on $acctName...';
+      reconnecting.value = lastResort
+          ? 'Trying ${alt.name} on $acctName (${alt.country}: no ${ref.country} backup left)...'
+          : 'Trying ${alt.name} on $acctName...';
     } catch (_) {
       reconnecting.value = giveUpMsg;
     }
@@ -766,15 +817,15 @@ class PlaybackService {
     final np = player.platform;
     if (np is NativePlayer) {
       try {
-        await np.setProperty('volume-max', '150');
+        await _setP(np, 'volume-max', '150');
         // Keep a subtitle track loaded but hidden, so turning subs on is instant.
         // (Switching tracks mid-stream forces a re-read that stalls live streams.)
-        await np.setProperty('subs-fallback', 'yes');
-        await np.setProperty('slang', Prefs.getStr('subs.lang') ?? 'en,eng');
+        await _setP(np, 'subs-fallback', 'yes');
+        await _setP(np, 'slang', Prefs.getStr('subs.lang') ?? 'en,eng');
         final alang = Prefs.getStr('audio.lang');
-        if (alang != null && alang.isNotEmpty) await np.setProperty('alang', alang);
+        if (alang != null && alang.isNotEmpty) await _setP(np, 'alang', alang);
         subsVisible.value = Prefs.getBool('subs.on');
-        await np.setProperty('sub-visibility', subsVisible.value ? 'yes' : 'no');
+        await _setP(np, 'sub-visibility', subsVisible.value ? 'yes' : 'no');
       } catch (e) {
         debugPrint('[playback] startup settings: $e');
       }
@@ -787,7 +838,7 @@ class PlaybackService {
     subsVisible.value = on;
     Prefs.setBool('subs.on', on);
     final np = player.platform;
-    if (np is NativePlayer) await np.setProperty('sub-visibility', on ? 'yes' : 'no');
+    if (np is NativePlayer) await _setP(np, 'sub-visibility', on ? 'yes' : 'no');
   }
 
   /// Pick a subtitle language. Only switches tracks if it's a different one.
@@ -795,7 +846,7 @@ class PlaybackService {
     if (player.state.track.subtitle.id != t.id) await player.setSubtitleTrack(t);
     subsVisible.value = true;
     final np = player.platform;
-    if (np is NativePlayer) await np.setProperty('sub-visibility', 'yes');
+    if (np is NativePlayer) await _setP(np, 'sub-visibility', 'yes');
     // Remembered for this show; Settings stays your everyday default.
     TrackMemory.save(current.value, sub: t.language ?? '', subsOn: true);
   }
@@ -803,13 +854,13 @@ class PlaybackService {
   Future<void> setAudioLang(String codes) async {
     Prefs.setStr('audio.lang', codes.isEmpty ? null : codes);
     final np = player.platform;
-    if (np is NativePlayer) await np.setProperty('alang', codes);
+    if (np is NativePlayer) await _setP(np, 'alang', codes);
   }
 
   Future<void> setSubLang(String codes) async {
     Prefs.setStr('subs.lang', codes);
     final np = player.platform;
-    if (np is NativePlayer) await np.setProperty('slang', codes);
+    if (np is NativePlayer) await _setP(np, 'slang', codes);
   }
 
   Future<void> setVolume(double v) async {
@@ -836,7 +887,7 @@ class PlaybackService {
     if (cur.kind != 'live') await _saveProgress();
     handedOff.value = true;
     try {
-      await player.stop();
+      await _stopP();
     } catch (_) {}
   }
 
@@ -845,7 +896,7 @@ class PlaybackService {
     final np = player.platform;
     if (np is! NativePlayer) return;
     try {
-      await np.setProperty('start', at == null ? 'none' : '${at.inSeconds}');
+      await _setP(np, 'start', at == null ? 'none' : '${at.inSeconds}');
     } catch (e) {
       debugPrint('[playback] start position: $e');
     }
@@ -902,9 +953,17 @@ class PlaybackService {
     // The relay found this channel dead on this account (410: no video, silence, or a Stalker 407 lockout):
     // remember it for 30 minutes and go straight to a backup instead of asking that server again.
     if (was4xx && (code == 410 || (code == 407 && _stalkerKnown(item)))) {
-      _deadUntil['${item.accountId}|${item.streamId}'] = DateTime.now().add(const Duration(minutes: 30));
-      debugPrint('[stalker] ${item.name} is down on this account; skipping it there for 30 minutes');
-      _failoverOrGiveUp(item, "This channel isn't working on this account right now. Try again in 30 minutes, or pick another channel.");
+      // Starved (the provider was sending almost no video) can clear up quickly: 10 minutes, not 30.
+      final starved = code == 410 && TsRelay.starvedJustNow;
+      _deadUntil['${item.accountId}|${item.streamId}'] = DateTime.now().add(Duration(minutes: starved ? 10 : 30));
+      debugPrint(starved
+          ? '[playback] ${item.name}: this provider is sending almost no video for it; skipping it on this account for 10 minutes'
+          : '[stalker] ${item.name} is down on this account; skipping it there for 30 minutes');
+      _failoverOrGiveUp(
+          item,
+          starved
+              ? 'This provider is sending almost no video for this channel right now. Try again in a few minutes, or pick another channel.'
+              : "This channel isn't working on this account right now. Try again in 30 minutes, or pick another channel.");
       return;
     }
     // Opened as HLS and it didn't start: this account doesn't serve HLS (or not this channel).
@@ -919,10 +978,23 @@ class PlaybackService {
       final just403 = _last403 != null && DateTime.now().difference(_last403!) < const Duration(seconds: 10);
       // Stalker already waited up to a minute for the server: go straight to a backup.
       final stalker = _stalkerKnown(item);
-      if (_startRetries >= (stalker ? 0 : (just403 ? 3 : 1))) {
+      // 458 is how some providers say "this account is already playing somewhere else". One portal
+      // also answers it with nothing else using the account (Chad, November 13: a whole group of
+      // its channels at once), so there it's the provider refusing those channels for now. Either
+      // way, asking again right away doesn't help, on any kind of account: go to a backup.
+      final refused458 = was4xx && code == 458;
+      // The server's name doesn't exist (a dead free channel, usually): retrying can't help either.
+      final noServer = _lastNoServer != null && DateTime.now().difference(_lastNoServer!) < const Duration(seconds: 10);
+      if (refused458) debugPrint('[playback] ${item.name}: the provider answered 458 (account in use somewhere else, or the provider is blocking this channel for now)');
+      if (noServer) debugPrint("[playback] ${item.name}: its server name doesn't exist; not retrying");
+      if (refused458 || noServer || _startRetries >= (stalker ? 0 : (just403 ? 3 : 1))) {
         _failoverOrGiveUp(
             item,
-            stalker
+            refused458
+                ? 'The provider refused this channel (error 458). The account may be in use somewhere else, or the provider is blocking this channel for now. Try again in a minute, or pick another channel.'
+                : noServer
+                ? "Couldn't find this channel's server. If your internet is working, the channel's address is out of date."
+                : stalker
                 ? "This channel didn't start on this account. Try again in a minute, or pick another channel."
                 : just403
                     ? 'This account is already in use (one connection at a time). Close VLC or other devices using it, then try again.'
@@ -939,7 +1011,7 @@ class PlaybackService {
         _reconnectPending = false;
         if (current.value?.id != item.id) return;
         await _reopen(item, url);
-        await player.play();
+        await _playP();
       });
       return;
     }
@@ -987,7 +1059,7 @@ class PlaybackService {
       if (current.value?.id != item.id) return;
       await _reopen(item, url);
       // A reopened stream can come back paused; make sure it plays.
-      await player.play();
+      await _playP();
     });
   }
 
@@ -1121,7 +1193,7 @@ class PlaybackService {
     _note("HLS isn't working on this account, so back to the regular stream.");
     _lastUrl = ts;
     _startRetries = 0;
-    _reopen(item, ts).then((_) => player.play());
+    _reopen(item, ts).then((_) => _playP());
   }
 
   /// The relay reports footage lost at reconnects (jumps), counted over 2 minutes.
@@ -1155,7 +1227,7 @@ class PlaybackService {
     _lastUrl = hls;
     _watchHlsStart(item);
     await _reopen(item, hls);
-    await player.play();
+    await _playP();
   }
 
   /// The provider keeps cutting this live stream and footage gets lost each time (the picture
@@ -1201,7 +1273,7 @@ class PlaybackService {
       final np = player.platform;
       if (np is NativePlayer && current.value?.id == cur.id) {
         try {
-          await np.setProperty('cache-pause-wait', '$after'); // takes effect at the next rebuffer
+          await _setP(np, 'cache-pause-wait', '$after'); // takes effect at the next rebuffer
         } catch (_) {}
       }
     });
@@ -1240,7 +1312,7 @@ class PlaybackService {
       }
     }
     _openedAt = DateTime.now();
-    await player.open(Media(_wrap(item, url), httpHeaders: _headersFor(item)));
+    await _openP(Media(_wrap(item, url), httpHeaders: _headersFor(item)));
   }
 
   /// Every 2 minutes while a Stalker channel plays, so the portal keeps the session.

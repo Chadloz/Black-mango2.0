@@ -16,6 +16,7 @@ import '../../core/catalog/display_name.dart';
 import '../../core/widgets/filter_menu.dart';
 import '../../core/widgets/track_menu.dart';
 import '../../core/widgets/player_controls.dart';
+import '../../core/widgets/player_message.dart';
 import '../../core/epg/epg_service.dart';
 import '../../core/hotkeys.dart';
 import '../../core/widgets/mini_player.dart';
@@ -50,6 +51,7 @@ class _LiveScreenState extends State<LiveScreen> {
   final _scroll = KeepScrollController(screen: 1); // keeps your spot through the floating player
   final _searchCtrl = TextEditingController(); // keeps search text across layout changes
   int _sel = -1; // keyboard selection in the list
+  Offset? _hoverFrom; // where the mouse was when it first moved after a key press
   StreamSubscription<HK>? _hkSub;
   StreamSubscription<int>? _gotoSub;
   Set<String> _favKeys = {};
@@ -153,6 +155,7 @@ class _LiveScreenState extends State<LiveScreen> {
 
   void _onHotkey(HK a) {
     if (_items.isEmpty) return;
+    _hoverFrom = null; // the keyboard has the list now; a real mouse move hands it back
     // Channel flipping works from anywhere (fullscreen too) while a live channel plays.
     if (a == HK.channelNext || a == HK.channelPrev) {
       final cur = Services.playback.current.value;
@@ -188,6 +191,7 @@ class _LiveScreenState extends State<LiveScreen> {
       debugPrint('[live] no channel $n in this list');
       return;
     }
+    _hoverFrom = null;
     setState(() => _sel = n - 1);
     _play(_items[n - 1]);
     _revealIndex(n - 1);
@@ -516,9 +520,21 @@ class _LiveScreenState extends State<LiveScreen> {
     }
     // Number column fits the biggest number in the list, plus a little gap.
     final numberWidth = Prefs.getBool('live.hideNumbers') ? 0.0 : _items.length.toString().length * 7.5 + 10;
+    final origin = Services.playback.failoverOrigin;
     return Stack(
       children: [
-        ListView.builder(
+        // Three highlights, each with its own look: playing (accent tint and the sound bars),
+        // keyboard (accent outline), mouse (the soft hover bar). Only one of the last two shows at
+        // a time: while the arrow keys drive, the mouse's bar is hidden (the list scrolls under a
+        // resting mouse, which made a second box wander around); moving the mouse a little hands
+        // the list back to the mouse and clears the outline.
+        MouseRegion(
+          onHover: (e) {
+            if (_sel < 0) return;
+            final from = _hoverFrom ??= e.position;
+            if ((e.position - from).distance > 12) setState(() => _sel = -1);
+          },
+          child: ListView.builder(
       controller: _scroll,
       itemCount: _items.length,
       itemExtent: 60,
@@ -528,15 +544,19 @@ class _LiveScreenState extends State<LiveScreen> {
           index: i,
           item: it,
           accountName: _acctNames[it.accountId] ?? '',
-          active: cur?.id == it.id || Services.playback.failoverOrigin?.id == it.id,
+          active: cur?.id == it.id,
+          // The channel you picked, when a backup is playing instead: a small tag, no tint.
+          picked: origin?.id == it.id && cur?.id != it.id,
           onTap: () => _play(it),
           numberWidth: numberWidth,
           isFav: _favKeys.contains(favKey(it)),
           onFav: () => Services.favorites.toggle(it),
           selected: i == _sel,
+          keyboard: _sel >= 0,
         );
       },
     ),
+        ),
         // Jump to the top or bottom; B (or the shortcut you set) goes back to where you were.
         Positioned(right: 10, bottom: 10, child: JumpButtons(controller: _scroll)),
       ],
@@ -573,24 +593,7 @@ class _PlayerArea extends StatelessWidget {
                   controls: (state) => BMControls(state: state, rightInset: 0),
                 ),
                 const Positioned.fill(child: HandOffOverlay()),
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  // Reconnect status first; otherwise a short note (like a channel getting extra buffer).
-                  child: ListenableBuilder(
-                    listenable: Listenable.merge([Services.playback.reconnecting, Services.playback.playerNote]),
-                    builder: (context, _) {
-                      final msg = Services.playback.reconnecting.value ?? Services.playback.playerNote.value;
-                      return msg == null
-                          ? const SizedBox.shrink()
-                          : Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
-                              child: Text(msg, style: TextStyle(color: BMColors.mango, fontWeight: FontWeight.w600)),
-                            );
-                    },
-                  ),
-                ),
+                const PlayerMessage(),
               ],
             ),
           ),
@@ -635,7 +638,9 @@ class _ChannelRow extends StatelessWidget {
   final bool isFav;
   final VoidCallback onFav;
   final bool selected;
-  const _ChannelRow({required this.index, required this.item, required this.accountName, required this.active, required this.onTap, required this.numberWidth, required this.isFav, required this.onFav, this.selected = false});
+  final bool picked;
+  final bool keyboard; // the arrow keys are driving the list: no mouse highlight on any row
+  const _ChannelRow({required this.index, required this.item, required this.accountName, required this.active, required this.onTap, required this.numberWidth, required this.isFav, required this.onFav, this.selected = false, this.picked = false, this.keyboard = false});
 
   @override
   Widget build(BuildContext context) {
@@ -650,13 +655,16 @@ class _ChannelRow extends StatelessWidget {
         : [item.genre, item.country, item.category].where((s) => s.isNotEmpty).join('  ·  ');
     return InkWell(
       onTap: onTap,
+      hoverColor: keyboard ? Colors.transparent : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: active ? BMColors.mango.withAlpha(0x22) : (selected ? const Color(0x18FFFFFF) : null),
+          color: active ? BMColors.mango.withAlpha(0x22) : null,
           image: active ? SkinTextures.image(Skins.skin, TextureArea.accent) : null,
           border: Border(bottom: BorderSide(color: BMColors.border, width: 0.5)),
         ),
+        // Keyboard selection: an outline drawn on top, so nothing in the row shifts.
+        foregroundDecoration: selected ? BoxDecoration(border: Border.all(color: BMColors.mango, width: 1.5)) : null,
         child: Row(
           children: [
             if (numberWidth > 0)
@@ -686,6 +694,21 @@ class _ChannelRow extends StatelessWidget {
                         const SizedBox(width: 6),
                         TagChips(displayName(item.name).tags, max: 3),
                       ],
+                      if (picked) ...[
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message: "The channel you picked. It wasn't working, so a backup is playing.",
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: BMColors.mango),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text('PICKED',
+                                style: TextStyle(fontSize: 9.5, height: 1.3, fontWeight: FontWeight.w700, color: BMColors.mango, fontFamily: BMFonts.mono)),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   Text.rich(
@@ -705,6 +728,7 @@ class _ChannelRow extends StatelessWidget {
             IconButton(
               tooltip: isFav ? 'Remove from favorites' : 'Add to favorites',
               onPressed: onFav,
+              hoverColor: keyboard ? Colors.transparent : null,
               icon: Icon(isFav ? Icons.star : Icons.star_border, color: isFav ? BMColors.mango : BMColors.dim, size: 20),
             ),
           ],

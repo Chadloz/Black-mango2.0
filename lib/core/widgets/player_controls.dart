@@ -9,6 +9,8 @@ import '../playback/still_watching.dart';
 import 'mini_player.dart';
 import '../hotkeys.dart';
 import '../playback/vod_failover.dart';
+import '../storage/database.dart';
+import '../favorites/favorites_service.dart';
 import 'transport.dart';
 
 String _time(Duration d) {
@@ -172,6 +174,7 @@ class _BMControlsState extends State<BMControls> {
           TransportButtons(full: true, width: box.maxWidth),
           const SizedBox(width: 4),
           Expanded(child: _live ? _liveBadge() : _seekBar()),
+          if (!narrow) const FavoriteButton(), // star what's playing (S, or the shortcut you set)
           if (!fs && !narrow) const AutoFloatToggle(), // float automatically when you switch apps: on/off
           if (!fs && !narrow)
             IconButton(
@@ -244,6 +247,43 @@ class _BMControlsState extends State<BMControls> {
           ],
         );
         });
+      },
+    );
+  }
+}
+
+/// The star on the control bar: adds what's playing (a live channel or a movie) to favorites,
+/// or takes it back out. Same as its shortcut (S unless you changed it).
+class FavoriteButton extends StatefulWidget {
+  const FavoriteButton({super.key});
+
+  @override
+  State<FavoriteButton> createState() => _FavoriteButtonState();
+}
+
+class _FavoriteButtonState extends State<FavoriteButton> {
+  // One subscription for the life of the button (a new one per rebuild would make the star blink).
+  late final Stream<Set<String>> _keys = Services.favorites.watchKeys();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<Item?>(
+      valueListenable: Services.playback.current,
+      builder: (context, cur, _) {
+        if (cur == null || !Hotkeys.canFavorite(cur.kind)) return const SizedBox.shrink();
+        return StreamBuilder<Set<String>>(
+          stream: _keys,
+          builder: (context, snap) {
+            final on = (snap.data ?? const <String>{}).contains(favKey(cur));
+            final key = bindingName(Hotkeys.bindingFor(HK.favorite));
+            return IconButton(
+              tooltip: on ? 'Remove from favorites ($key)' : 'Add to favorites ($key)',
+              color: on ? BMColors.mango : BMColors.controls,
+              onPressed: Hotkeys.toggleFavorite,
+              icon: Icon(on ? Icons.star : Icons.star_border),
+            );
+          },
+        );
       },
     );
   }

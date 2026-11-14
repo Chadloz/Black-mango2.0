@@ -13,13 +13,15 @@ class FavoritesService {
         (rows) => {for (final f in rows) '${f.accountId}|${f.kind}|${f.itemKey}'},
       );
 
-  Future<void> toggle(Item item) async {
+  /// Adds or removes a favorite. Returns true when it's a favorite afterwards.
+  Future<bool> toggle(Item item) async {
     final k = item.streamId.isNotEmpty ? item.streamId : item.url;
     Expression<bool> match(Favorites f) =>
         f.accountId.equals(item.accountId) & f.kind.equals(item.kind) & f.itemKey.equals(k);
     final existing = await (db.select(db.favorites)..where(match)).get();
     if (existing.isNotEmpty) {
       await (db.delete(db.favorites)..where(match)).go();
+      return false;
     } else {
       await db.into(db.favorites).insert(FavoritesCompanion.insert(
             accountId: item.accountId,
@@ -29,6 +31,7 @@ class FavoritesService {
             logo: Value(item.logo),
             addedAt: DateTime.now(),
           ));
+      return true;
     }
   }
 

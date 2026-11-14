@@ -4,6 +4,7 @@ import '../../core/services.dart';
 import '../../core/storage/database.dart';
 import '../../core/accounts/account_parser.dart';
 import '../../core/catalog/free_packs.dart';
+import '../../core/catalog/pack_refresh.dart';
 
 /// Free channel packs. Each one is saved as an M3U account, marked with "pack:<id>"
 /// in the username field (M3U accounts don't use usernames otherwise).
@@ -23,7 +24,10 @@ class FreeChannelsDialog extends StatelessWidget {
     if (a == null) return;
     messenger.showSnackBar(SnackBar(content: Text('${p.name}: loading...')));
     Services.catalog.load(a).then(
-          (m) => messenger.showSnackBar(SnackBar(content: Text('${p.name}: $m'))),
+          (m) {
+            PackRefresh.stamp(id); // fresh as of now; the daily background refresh takes it from here
+            messenger.showSnackBar(SnackBar(content: Text('${p.name}: $m')));
+          },
           onError: (e) => messenger.showSnackBar(SnackBar(content: Text('${p.name}: load failed: $e'))),
         );
   }
@@ -54,7 +58,7 @@ class FreeChannelsDialog extends StatelessWidget {
             ),
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 24),
-              child: Text('Free public channel packs. Add one and it loads like any other account.',
+              child: Text('Free public channel packs. Add one and it loads like any other account, then refreshes itself once a day.',
                   style: TextStyle(fontSize: 13, color: BMColors.dim)),
             ),
             const SizedBox(height: 8),

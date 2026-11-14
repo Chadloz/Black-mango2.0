@@ -32,6 +32,7 @@ enum HK {
   listTop,
   listBottom,
   listBack,
+  favorite,
 }
 
 const hkLabels = {
@@ -56,6 +57,7 @@ const hkLabels = {
   HK.listTop: 'Jump to the top of the list',
   HK.listBottom: 'Jump to the bottom of the list',
   HK.listBack: 'Back to where you were in the list',
+  HK.favorite: "Add what's playing to favorites (or remove it)",
 };
 
 /// Added to a key id to mean "with Shift held".
@@ -83,6 +85,7 @@ final _defaults = <HK, int>{
   HK.listTop: LogicalKeyboardKey.home.keyId,
   HK.listBottom: LogicalKeyboardKey.end.keyId,
   HK.listBack: LogicalKeyboardKey.keyB.keyId,
+  HK.favorite: LogicalKeyboardKey.keyS.keyId,
 };
 
 /// How Settings groups the shortcuts: (title, note, actions).
@@ -104,6 +107,7 @@ const hkSections = <(String, String, List<HK>)>[
       HK.volumeDown,
       HK.mute,
       HK.fullscreen,
+      HK.favorite,
       HK.closePlayer,
     ]
   ),
@@ -185,6 +189,17 @@ class Hotkeys {
 
   static bool isModifier(LogicalKeyboardKey k) => _modifiers.contains(k);
 
+  /// What the favorite star and its shortcut work on: live channels and movies.
+  static bool canFavorite(String? kind) => kind == 'live' || kind == 'movie';
+
+  /// Adds what's playing to favorites, or takes it back out, with a short note on the player.
+  static Future<void> toggleFavorite() async {
+    final cur = Services.playback.current.value;
+    if (cur == null || !canFavorite(cur.kind)) return;
+    final now = await Services.favorites.toggle(cur);
+    Services.playback.showNote(now ? 'Added to favorites' : 'Removed from favorites');
+  }
+
   static bool _typing() {
     final ctx = FocusManager.instance.primaryFocus?.context;
     if (ctx == null) return false;
@@ -195,7 +210,36 @@ class Hotkeys {
     HK.volumeUp, HK.volumeDown, HK.seekBack, HK.seekForward, HK.seekBack30, HK.seekForward30, HK.navUp, HK.navDown,
   };
 
+  static KeyEvent? _took; // the key press a shortcut just acted on (null when none did)
+
   static bool _handle(KeyEvent e) {
+    final handled = _handleKey(e);
+    _took = handled ? e : null;
+    return handled;
+  }
+
+  /// Whether Flutter's own keyboard handling should leave this key press alone because one of
+  /// our shortcuts already used it.
+  ///
+  /// Why: Flutter gives every key press to its focus system as well, whatever our shortcuts did
+  /// with it. Arrow keys and Tab are its "move the focus box" keys, so on Live TV each arrow
+  /// press moved our highlight AND walked Flutter's gray focus box down the list one row at a
+  /// time (and onto the stars, which got a circle). That second box is what looked like
+  /// highlights going haywire. Only those keys are held back, and arrows only on Live TV, so
+  /// Enter and Space on buttons, dialogs, and arrow keys on other screens work as before.
+  static bool ownsFocusKey(KeyEvent e) {
+    final t = _took;
+    if (t == null || t.logicalKey != e.logicalKey || t.timeStamp != e.timeStamp) return false;
+    final k = e.logicalKey;
+    if (k == LogicalKeyboardKey.tab) return true;
+    final arrow = k == LogicalKeyboardKey.arrowUp ||
+        k == LogicalKeyboardKey.arrowDown ||
+        k == LogicalKeyboardKey.arrowLeft ||
+        k == LogicalKeyboardKey.arrowRight;
+    return arrow && AppNav.index.value == AppNav.live;
+  }
+
+  static bool _handleKey(KeyEvent e) {
     if (e is! KeyDownEvent && e is! KeyRepeatEvent) return false;
     if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.enter) {
       final f = FocusManager.instance.primaryFocus;
@@ -311,6 +355,10 @@ class Hotkeys {
         return true;
       case HK.backToLast:
         AppNav.index.value = _prev;
+        return true;
+      case HK.favorite:
+        if (cur == null || !canFavorite(cur.kind)) return false;
+        toggleFavorite();
         return true;
       case HK.listTop:
         return KeepScrollController.on(AppNav.index.value)?.toTop() ?? false;

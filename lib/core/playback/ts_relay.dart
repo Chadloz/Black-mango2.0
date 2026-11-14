@@ -72,12 +72,23 @@ class TsRelay {
     return p.endsWith('.ts') || (p.contains('/live/') && RegExp(r'/\d+$').hasMatch(p));
   }
 
+  static DateTime? _starvedAt;
+
+  /// True right after the relay gave up on a channel because the provider was sending almost
+  /// no video (so playback can say that, in place of the general "isn't working" message).
+  static bool get starvedJustNow =>
+      _starvedAt != null && DateTime.now().difference(_starvedAt!) < const Duration(seconds: 20);
+
+  /// Whether [url] would go through the relay (so playback can give the relay time to reconnect).
+  static bool relays(String url, {bool live = false}) =>
+      _server != null && !Prefs.getBool('relay.off') && (live || _isLiveTs(url));
+
   /// The URL the player should open. Live .ts goes through the relay; everything else is untouched.
   /// [live] marks a stream known to be live MPEG-TS even when its link doesn't look like one (Stalker).
   /// [group] (a Stalker account) allows one request at a time: a new one closes the previous.
   static String wrap(String url, {bool live = false, Future<String> Function()? refresh, String? group}) {
     final s = _server;
-    if (s == null || Prefs.getBool('relay.off') || !(live || _isLiveTs(url))) return url;
+    if (s == null || !relays(url, live: live)) return url;
     final id = _token();
     _urls[id] = _Target(url, refresh, group);
     if (_urls.length > 40) _urls.remove(_urls.keys.first);
@@ -206,6 +217,7 @@ class TsRelay {
           busyTries++;
           debugPrint('[relay] $name: the same server is still busy (${r.statusCode})');
         } catch (e) {
+          if (closed) return null; // you moved on, or the player hung up: nothing to report
           debugPrint('[relay] $name: the same server didn\'t answer (${_why(e)}); asking the provider again');
           break;
         }
@@ -259,7 +271,7 @@ class TsRelay {
       final began = DateTime.now();
       // A busy Stalker server can sit on a request for ~45 s before saying no (509): stop at 55.
       // A Stalker channel that hasn't answered within 12 s counts as down on this account.
-      final r = stalker ? await up.close().timeout(_stalkerStart) : await up.close();
+      final r = await up.close().timeout(stalker ? _stalkerStart : _answerWait);
       if (!stalker) remember(r, target);
       if (stalker) {
         // Diagnostics for Stalker: what the stream server answered (never the link itself).
@@ -341,6 +353,9 @@ class TsRelay {
       final filter = _TsFilter(
         onDolby: () => debugPrint('[relay] Dolby Digital Plus audio relabeled so it plays'),
         onResume: (m) => debugPrint('[relay] $name reconnected: $m'),
+        onGap: (s) => debugPrint('[relay] $name: this feed stamps its sound ${s.abs().toStringAsFixed(1)} s '
+            '${s > 0 ? 'later' : 'earlier'} than its picture (the provider\'s clocks don\'t match). '
+            'Expect missing sound or a picture that freezes; another account\'s copy may be fine.'),
         onJump: () {
           final now = DateTime.now();
           jumps
@@ -351,6 +366,7 @@ class TsRelay {
       );
       var quickEnds = 0;
       var silentRuns = 0; // reconnects in a row where the server answered but sent nothing
+      var starvedRuns = 0; // connections in a row that carried almost no video
       while (!closed) {
         final started = DateTime.now();
         var bytes = 0;
@@ -391,6 +407,21 @@ class TsRelay {
           debugPrint('[relay] $name: server keeps answering with no video; treating this channel as down on this account');
           break;
         }
+        // Starved: two connections in a row that brought under 40 KB a second (even a small
+        // picture needs more) before the provider closed them. Reconnecting just repeats it; it
+        // took six rounds, about a minute, before playback gave up (test build 8). Mark the
+        // channel down here now, so playback goes to a backup or says what's wrong. Channels
+        // with no picture (radio) are left alone: that little data is normal for them.
+        final starved = filter.hasVideo && secs >= 3 && bytes < secs * 40000;
+        starvedRuns = starved ? starvedRuns + 1 : 0;
+        if (starvedRuns >= 2) {
+          t.dead = true;
+          _starvedAt = DateTime.now();
+          debugPrint('[relay] $name: the provider is sending almost no video '
+              '(${(bytes / 1000).toStringAsFixed(0)} KB in ${secs.toStringAsFixed(0)} s, twice running); '
+              'treating this channel as down on this account');
+          break;
+        }
         quickEnds = secs < 3 ? quickEnds + 1 : 0;
         if (quickEnds >= 5) {
           debugPrint('[relay] $name keeps dropping; handing it back to the player');
@@ -414,6 +445,8 @@ class TsRelay {
               }
             }
           } catch (e) {
+            // Closed while reconnecting (you changed channel, or the player hung up): not a failure.
+            if (closed) break;
             debugPrint('[relay] $name reconnect failed: ${_why(e)}');
           }
         }
@@ -478,6 +511,9 @@ class _Target {
 /// How long a Stalker channel gets to answer and send its first video before it counts as down.
 const _stalkerStart = Duration(seconds: 12);
 
+/// How long any other provider gets to answer a request (connecting has its own 12 s limit).
+const _answerWait = Duration(seconds: 15);
+
 /// [first], then the rest of [it]: a stream we already peeked into.
 Stream<List<int>> _startingWith(List<int> first, StreamIterator<List<int>> it) async* {
   yield first;
@@ -506,10 +542,47 @@ String _label(String url) {
 /// stream has caught up. Normal playback is never touched. Compares DECODE timestamps,
 /// which always move forward (display timestamps don't, with B-frames).
 class _TsFilter {
-  _TsFilter({required this.onDolby, required this.onResume, required this.onJump});
+  _TsFilter({required this.onDolby, required this.onResume, required this.onJump, this.onGap});
   final VoidCallback onDolby;
   final void Function(String) onResume;
   final VoidCallback onJump; // a reconnect that lost footage (the picture jumps forward)
+  final void Function(double seconds)? onGap; // sound and picture stamped far apart (measured once)
+
+  /// Whether the stream has a picture (false for radio, and until its table of contents arrives).
+  bool get hasVideo => _videoPid != null;
+
+  static const _audioTypes = {0x03, 0x04, 0x0F, 0x11, 0x81, 0x87}; // MPEG audio, AAC, Dolby
+  final _audioPids = <int>{};
+  int? _lastVideoPts; // display timestamp of the newest picture frame (90 kHz)
+  final _gapCount = <int, int>{}; // per sound track: frames compared so far
+  final _gapClosest = <int, int>{}; // per sound track: the smallest gap seen (90 kHz, signed)
+  bool _gapDone = false;
+
+  /// Compares when the sound and the picture arriving together say they should play. In a
+  /// healthy feed that's within a second or two; some feeds have them minutes apart, and every
+  /// player then shows picture without sound, or freezes the picture when the sound's turn
+  /// comes. This only measures and reports (once per stream); nothing in the stream is changed.
+  void _measureGap(int pid, int pts) {
+    if (pid == _videoPid) {
+      _lastVideoPts = pts;
+      return;
+    }
+    final v = _lastVideoPts;
+    if (v == null || !_audioPids.contains(pid)) return;
+    var diff = pts - v;
+    // Timestamps wrap around every 26.5 hours (33 bits): take the short way round.
+    const wrap = 1 << 33;
+    if (diff > wrap ~/ 2) diff -= wrap;
+    if (diff < -(wrap ~/ 2)) diff += wrap;
+    final n = (_gapCount[pid] ?? 0) + 1;
+    _gapCount[pid] = n;
+    final closest = _gapClosest[pid];
+    if (closest == null || diff.abs() < closest.abs()) _gapClosest[pid] = diff;
+    if (n < 60) return;
+    _gapDone = true;
+    final gap = _gapClosest[pid]!;
+    if (gap.abs() > 5 * 90000) onGap?.call(gap / 90000.0);
+  }
 
   static const _videoTypes = {0x01, 0x02, 0x1B, 0x24};
 
@@ -601,6 +674,7 @@ class _TsFilter {
         int? t;
         if (p + 14 <= end && (d[p + 7] & 0x80) != 0) {
           t = _ts(d, p + 9);
+          if (!_gapDone) _measureGap(pid, t); // display timestamps, before switching to decode ones
           if ((d[p + 7] & 0xC0) == 0xC0 && p + 19 <= end) t = _ts(d, p + 14);
         }
         if (t == null) {
@@ -734,6 +808,7 @@ class _TsFilter {
         _videoPid = esPid;
         _videoType = d[k];
       }
+      if (_audioTypes.contains(d[k])) _audioPids.add(esPid);
       if (d[k] == 0x87) {
         d[k] = 0x81;
         changed = true;

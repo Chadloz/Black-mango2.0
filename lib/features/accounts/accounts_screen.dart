@@ -7,6 +7,53 @@ import '../../core/storage/database.dart';
 import 'add_account_dialog.dart';
 import 'free_channels_dialog.dart';
 import '../../core/prefs.dart';
+import '../../core/net/fetch.dart';
+
+/// Reload all: every account, one after another. One at a time on purpose: portals block
+/// accounts that get hit too hard, and each account's own Stop still works while it's going.
+class _ReloadAll {
+  static final running = ValueNotifier<bool>(false);
+  static bool _stop = false;
+
+  static Future<void> start(ScaffoldMessengerState messenger) async {
+    if (running.value) return;
+    running.value = true;
+    _stop = false;
+    var ok = 0;
+    final skipped = <String>[];
+    try {
+      final accts = await Services.accounts.watchAll().first;
+      for (final a in accts) {
+        if (_stop) break;
+        try {
+          await Services.catalog.load(a);
+          final host = Uri.tryParse(a.server)?.host ?? '';
+          if (host.isNotEmpty) Services.health.clear(host);
+          ok++;
+        } catch (e) {
+          skipped.add(a.name);
+          debugPrint('[accounts] reload all: ${a.name}: $e');
+        }
+      }
+    } finally {
+      running.value = false;
+    }
+    final msg = _stop
+        ? 'Reload all stopped. $ok reloaded.'
+        : skipped.isEmpty
+            ? 'Reloaded all $ok accounts.'
+            : '$ok reloaded. Not reloaded (kept as they were): ${skipped.join(', ')}.';
+    messenger.showSnackBar(SnackBar(content: Text(msg), duration: const Duration(seconds: 8)));
+  }
+
+  /// Stops the one that's loading and doesn't start the rest.
+  static void stop() {
+    _stop = true;
+    for (final id in Services.catalog.status.value.keys.toList()) {
+      Services.catalog.stop(id);
+    }
+  }
+}
 
 class AccountsScreen extends StatelessWidget {
   const AccountsScreen({super.key});
@@ -18,20 +65,43 @@ class AccountsScreen extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
-          child: Row(
+          // Wraps in a narrow window (behind the floating player) instead of running off the edge.
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 8,
             children: [
               Text('Accounts', style: BMFonts.titleStyle(24)),
-              const Spacer(),
-              OutlinedButton.icon(
-                onPressed: () => showDialog(context: context, builder: (_) => const FreeChannelsDialog()),
-                icon: const Icon(Icons.satellite_alt),
-                label: const Text('Free Channels'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: () => showDialog(context: context, builder: (_) => const AddAccountDialog()),
-                icon: const Icon(Icons.add),
-                label: const Text('Account'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _ReloadAll.running,
+                    builder: (context, running, _) => running
+                        ? OutlinedButton.icon(
+                            onPressed: _ReloadAll.stop,
+                            icon: const Icon(Icons.stop),
+                            label: const Text('Stop all'),
+                          )
+                        : OutlinedButton.icon(
+                            onPressed: () => _ReloadAll.start(ScaffoldMessenger.of(context)),
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Reload all'),
+                          ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => showDialog(context: context, builder: (_) => const FreeChannelsDialog()),
+                    icon: const Icon(Icons.satellite_alt),
+                    label: const Text('Free Channels'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () => showDialog(context: context, builder: (_) => const AddAccountDialog()),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Account'),
+                  ),
+                ],
               ),
             ],
           ),
@@ -119,6 +189,9 @@ class _AccountCard extends StatelessWidget {
       final host = Uri.tryParse(account.server)?.host ?? '';
       if (host.isNotEmpty) Services.health.clear(host);
       messenger.showSnackBar(SnackBar(content: Text('${account.name}: $msg')));
+    } on LoadStopped catch (e) {
+      // Stopped on purpose (the Stop button, or a crawling portal): not a failure.
+      messenger.showSnackBar(SnackBar(content: Text('${account.name}: $e'), duration: const Duration(seconds: 8)));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('${account.name}: load failed: $e')));
     }
@@ -181,7 +254,9 @@ class _AccountCard extends StatelessWidget {
                 children: [
                   const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
                   const SizedBox(width: 8),
-                  Text(msg, style: TextStyle(fontSize: 13, color: BMColors.mango)),
+                  Flexible(
+                    child: Text(msg, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: BMColors.mango)),
+                  ),
                 ],
               );
             },
@@ -198,10 +273,20 @@ class _AccountCard extends StatelessWidget {
                 icon: const Icon(Icons.edit, size: 16),
                 label: const Text('Rename'),
               ),
-              OutlinedButton.icon(
-                onPressed: () => _reload(context),
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Reload'),
+              // Reload, or Stop while this account is loading.
+              ValueListenableBuilder<Map<String, String>>(
+                valueListenable: Services.catalog.status,
+                builder: (context, st, _) => st.containsKey(account.id)
+                    ? OutlinedButton.icon(
+                        onPressed: () => Services.catalog.stop(account.id),
+                        icon: const Icon(Icons.stop, size: 16),
+                        label: const Text('Stop'),
+                      )
+                    : OutlinedButton.icon(
+                        onPressed: () => _reload(context),
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: const Text('Reload'),
+                      ),
               ),
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(

@@ -20,6 +20,9 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          # Locked on purpose, so a release never changes Flutter underneath us. Raise it only
+          # after that version has run on a Mac and a PC (docs/DECISIONS.md, Releases and updates).
+          flutter-version: '3.50.0'
           channel: stable
           cache: true
 
@@ -77,6 +80,9 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          # Locked on purpose, so a release never changes Flutter underneath us. Raise it only
+          # after that version has run on a Mac and a PC (docs/DECISIONS.md, Releases and updates).
+          flutter-version: '3.50.0'
           channel: stable
           cache: true
 
